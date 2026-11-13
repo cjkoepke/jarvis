@@ -7,7 +7,6 @@ pub mod skills;
 use crate::paths::Env;
 use anyhow::{Context, Result};
 use serde_json::json;
-use std::fs;
 use std::path::PathBuf;
 
 /// @agent To support another agent, add one file implementing this trait and list
@@ -45,16 +44,6 @@ pub fn chosen(ids: &[String]) -> Result<Vec<&'static dyn Agent>> {
     ids.iter()
         .map(|id| by_id(id).with_context(|| format!("unknown agent `{id}`; known agents: {}", known_ids.join(", "))))
         .collect()
-}
-
-pub fn record_installed(env: &Env, agents: &[&dyn Agent]) -> Result<()> {
-    let ids: Vec<&str> = agents.iter().map(|agent| agent.id()).collect();
-    fs::write(env.installed_agents_file(), ids.join("\n") + "\n").context("recording the installed agents")
-}
-
-pub fn installed(env: &Env) -> Vec<&'static dyn Agent> {
-    let ids = fs::read_to_string(env.installed_agents_file()).unwrap_or_default();
-    ids.lines().filter_map(by_id).collect()
 }
 
 pub fn hook_subcommand(agent: &dyn Agent, event: &str) -> String {

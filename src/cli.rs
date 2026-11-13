@@ -51,8 +51,15 @@ pub enum Format {
 
 #[derive(Args)]
 pub struct InstallArgs {
-    #[arg(long, default_value = "standards", help = "Folder holding core/, skills/ and rules/.")]
-    pub standards: PathBuf,
-    #[arg(long, value_delimiter = ',', help = "Agents to set up, comma-separated. Defaults to all of them.")]
+    #[arg(
+        long,
+        help = "Folder holding core/, skills/ and rules/. Defaults to the last install's folder, then ./standards."
+    )]
+    pub standards: Option<PathBuf>,
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help = "Agents to set up, comma-separated. Defaults to the last install's agents, then all of them."
+    )]
     pub agents: Vec<String>,
 }

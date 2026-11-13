@@ -75,5 +75,13 @@ fn skills_check(agent: &dyn Agent, env: &Env, standards: &Standards) -> Check {
             skills_dir.display()
         ));
     }
+    let out_of_date = skills::out_of_date(agent, env, standards);
+    if !out_of_date.is_empty() {
+        return skills.fail(format!(
+            "{} in {} differ from the installed standards; run `jarvis install`",
+            out_of_date.join(", "),
+            skills_dir.display()
+        ));
+    }
     skills.ok(format!("{} installed", standards.skills.len()))
 }

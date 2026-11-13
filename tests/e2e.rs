@@ -132,6 +132,10 @@ fn install_and_uninstall_leave_existing_configuration_alone() {
     assert_eq!(installed["hooks"]["SubagentStart"].as_array().unwrap().len(), 1);
     assert_eq!(fs::read_to_string(&own_skill).unwrap(), "mine\n");
 
+    assert!(sandbox.jarvis(&["install", "--agents", "claude"]).status.success());
+    assert!(!sandbox.home.join(".codex/hooks.json").exists());
+    assert!(!sandbox.home.join(".agents/skills/commenting").exists());
+
     assert!(sandbox.jarvis(&["uninstall"]).status.success());
     assert_eq!(read_json(&settings), serde_json::from_str::<Value>(settings_before).unwrap());
     assert_eq!(fs::read_to_string(&own_skill).unwrap(), "mine\n");

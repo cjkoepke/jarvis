@@ -30,8 +30,8 @@ impl Env {
         self.jarvis_dir().join("standards")
     }
 
-    pub fn installed_agents_file(&self) -> PathBuf {
-        self.jarvis_dir().join("agents")
+    pub fn install_record_file(&self) -> PathBuf {
+        self.jarvis_dir().join("install.json")
     }
 
     pub fn global_gitconfig(&self) -> PathBuf {

@@ -50,7 +50,9 @@ Without `--home`, `install` and `uninstall` act on your real home directory:
 Rule kinds: `forbidden-path`, `forbidden-content` (added lines only),
 `final-newline` and `trailing-whitespace` (the two the review can fix).
 
-Run `jarvis install` again after changing the standards.
+After changing the standards, `jarvis status` reports the installed copy as out
+of date. A bare `jarvis install` refreshes it from any directory: it reuses the
+standards folder and agents of the last install.
 
 ## Source layout
 
