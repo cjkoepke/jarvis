@@ -7,6 +7,14 @@ use std::path::{Path, PathBuf};
 
 type Config = Map<String, Value>;
 
+/// @agent Codex shows this as the hook's title in `/hooks` ("Unnamed hook" without
+/// it) and Claude Code shows it while the hook runs. Codex's trust hash covers it,
+/// so changing the text makes Codex ask for approval again.
+const TITLE: &str = "jarvis: working standards";
+
+/// @agent New groups are appended, never inserted. Codex records hook trust by
+/// position (`hooks.json:<event>:<group>:<handler>` in `~/.codex/config.toml`), so
+/// shifting a person's existing hooks would silently revoke their trust.
 pub fn register(agent: &dyn Agent, env: &Env) -> Result<()> {
     let path = agent.hooks_file(env);
     let mut config = read(&path)?;
@@ -21,7 +29,8 @@ pub fn register(agent: &dyn Agent, env: &Env) -> Result<()> {
         let groups = groups
             .as_array_mut()
             .with_context(|| format!("`hooks.{event}` in {} is not a list", path.display()))?;
-        groups.push(json!({ "hooks": [{ "type": "command", "command": hook_command(agent, env, event) }] }));
+        let handler = json!({ "type": "command", "command": hook_command(agent, env, event), "statusMessage": TITLE });
+        groups.push(json!({ "hooks": [handler] }));
     }
     write(&path, &config)
 }
@@ -44,23 +53,31 @@ pub fn unregister(agent: &dyn Agent, env: &Env) -> Result<()> {
 
 pub struct RegisteredHook {
     pub event: &'static str,
+    pub group_index: usize,
+    pub handler_index: usize,
     pub executable: PathBuf,
 }
 
+/// @agent The indices are positions inside the hooks file. Codex keys its trust
+/// records by them, which is why they are reported.
 pub fn registered(agent: &dyn Agent, env: &Env) -> Vec<RegisteredHook> {
     let config = read(&agent.hooks_file(env)).unwrap_or_default();
     let mut registered = Vec::new();
     for event in agent.context_events().iter().copied() {
         let subcommand = hook_subcommand(agent, event);
         let groups = config.get("hooks").and_then(|hooks| hooks.get(event)).and_then(Value::as_array);
-        let handlers = groups
-            .into_iter()
-            .flatten()
-            .filter_map(|group| group.get("hooks").and_then(Value::as_array))
-            .flatten();
-        for handler in handlers {
-            if let Some(executable) = command_of(handler).and_then(|command| env.executable_in(command, &subcommand)) {
-                registered.push(RegisteredHook { event, executable });
+        for (group_index, group) in groups.into_iter().flatten().enumerate() {
+            let handlers = group.get("hooks").and_then(Value::as_array);
+            for (handler_index, handler) in handlers.into_iter().flatten().enumerate() {
+                let executable = command_of(handler).and_then(|command| env.executable_in(command, &subcommand));
+                if let Some(executable) = executable {
+                    registered.push(RegisteredHook {
+                        event,
+                        group_index,
+                        handler_index,
+                        executable,
+                    });
+                }
             }
         }
     }

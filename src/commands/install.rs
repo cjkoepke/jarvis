@@ -1,4 +1,4 @@
-use crate::agents::{self, hooks_file, skills, Agent};
+use crate::agents::{self, hooks_file, skills, Agent, Approval};
 use crate::cli::InstallArgs;
 use crate::files::copy_dir;
 use crate::git::hook_config;
@@ -90,8 +90,11 @@ fn install_for_agent(agent: &dyn Agent, env: &Env, standards: &Standards) -> Res
     message::done(agent.id(), &format!("hooks in {}", agent.hooks_file(env).display()));
 
     let skipped_skills = skills::install(agent, env, standards)?;
-    for note in skipped_skills.iter().map(String::as_str).chain(agent.manual_step_after_install()) {
-        message::note(note);
+    for skipped in &skipped_skills {
+        message::note(skipped);
+    }
+    if let Approval::Pending { next_step } = agent.approval(env) {
+        message::note(next_step);
     }
     Ok(())
 }

@@ -74,5 +74,5 @@ and list it in `all()`.
 
 - The review only runs rules a program can decide. No model reads the change.
 - No repo bootstrap or sync.
-- Delivery is verified live for a Claude Code session start only. Sub-agent
-  delivery and Codex are covered by tests of the files and hook output, not by a live run.
+- Codex delivery only works once the hooks are approved with `/hooks`. Until
+  then Codex skips them and sessions start without the standards.

@@ -1,4 +1,4 @@
-use super::{hooks_file, skills, Agent};
+use super::{hooks_file, skills, Agent, Approval};
 use crate::check::{Check, CheckSubject};
 use crate::files::find_on_path;
 use crate::paths::Env;
@@ -10,9 +10,7 @@ pub fn run(agent: &dyn Agent, env: &Env, standards: &Standards) -> Vec<Check> {
         hooks_check(agent, env),
         skills_check(agent, env, standards),
     ];
-    if let Some(step) = agent.manual_step_after_install() {
-        checks.push(subject(agent, "manual step").warn(format!("jarvis cannot check this: {step}")));
-    }
+    checks.extend(approval_check(agent, env));
     checks
 }
 
@@ -84,4 +82,13 @@ fn skills_check(agent: &dyn Agent, env: &Env, standards: &Standards) -> Check {
         ));
     }
     skills.ok(format!("{} installed", standards.skills.len()))
+}
+
+fn approval_check(agent: &dyn Agent, env: &Env) -> Option<Check> {
+    let approval = subject(agent, "approval");
+    match agent.approval(env) {
+        Approval::NotRequired => None,
+        Approval::Granted => Some(approval.ok("approved")),
+        Approval::Pending { next_step } => Some(approval.warn(next_step)),
+    }
 }

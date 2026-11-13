@@ -1,6 +1,7 @@
 pub mod checks;
 mod claude;
 mod codex;
+mod codex_trust;
 pub mod hooks_file;
 pub mod skills;
 
@@ -8,6 +9,12 @@ use crate::paths::Env;
 use anyhow::{Context, Result};
 use serde_json::json;
 use std::path::PathBuf;
+
+pub enum Approval {
+    NotRequired,
+    Granted,
+    Pending { next_step: &'static str },
+}
 
 /// @agent To support another agent, add one file implementing this trait and list
 /// it in `all()`. Hook registration, skills and status checks need no changes.
@@ -19,8 +26,8 @@ pub trait Agent: Sync {
     fn skills_dir(&self, env: &Env) -> PathBuf;
     fn context_events(&self) -> &'static [&'static str];
 
-    fn manual_step_after_install(&self) -> Option<&'static str> {
-        None
+    fn approval(&self, _env: &Env) -> Approval {
+        Approval::NotRequired
     }
 
     fn hook_reply(&self, event: &str, context: &str) -> String {
