@@ -4,6 +4,7 @@ use crate::files::copy_dir;
 use crate::git::hook_config;
 use crate::paths::Env;
 use crate::standards::Standards;
+use crate::ui::{message, Tone};
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
@@ -13,11 +14,14 @@ pub fn run(env: &Env, args: &InstallArgs) -> Result<ExitCode> {
     let agents = agents::chosen(&args.agents)?;
 
     let standards = replace_installed_standards(env, &args.standards)?;
-    println!(
-        "standards  copied to {} ({} skills, {} rules)",
-        env.installed_standards_dir().display(),
-        standards.skills.len(),
-        standards.rules.len()
+    message::done(
+        "standards",
+        &format!(
+            "copied to {} ({} skills, {} rules)",
+            env.installed_standards_dir().display(),
+            standards.skills.len(),
+            standards.rules.len()
+        ),
     );
 
     for agent in &agents {
@@ -26,9 +30,9 @@ pub fn run(env: &Env, args: &InstallArgs) -> Result<ExitCode> {
     agents::record_installed(env, &agents)?;
 
     hook_config::register(env)?;
-    println!("{:<10} pre-push review in {}", "git", env.global_gitconfig().display());
+    message::done("git", &format!("pre-push review in {}", env.global_gitconfig().display()));
 
-    println!("\nInstalled. Run `jarvis doctor` to check it.");
+    message::summary(Tone::Good, "Installed. Run `jarvis doctor` to check it.");
     Ok(ExitCode::SUCCESS)
 }
 
@@ -51,11 +55,11 @@ fn replace_installed_standards(env: &Env, source: &Path) -> Result<Standards> {
 
 fn install_for_agent(agent: &dyn Agent, env: &Env, standards: &Standards) -> Result<()> {
     hooks_file::register(agent, env)?;
-    println!("{:<10} hooks in {}", agent.id(), agent.hooks_file(env).display());
+    message::done(agent.id(), &format!("hooks in {}", agent.hooks_file(env).display()));
 
     let skipped_skills = skills::install(agent, env, standards)?;
     for note in skipped_skills.iter().map(String::as_str).chain(agent.manual_step_after_install()) {
-        println!("{:<10} note: {note}", "");
+        message::note(note);
     }
     Ok(())
 }

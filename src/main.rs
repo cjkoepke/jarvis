@@ -7,11 +7,13 @@ mod git;
 mod paths;
 mod rules;
 mod standards;
+mod ui;
 
 use clap::Parser;
 use cli::{Cli, Cmd};
 use paths::Env;
 use std::process::ExitCode;
+use ui::message;
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
@@ -20,7 +22,7 @@ fn main() -> ExitCode {
     let env = match Env::new(cli.home) {
         Ok(env) => env,
         Err(error) => {
-            eprintln!("jarvis: {error:#}");
+            message::error(&format!("{error:#}"));
             return if runs_inside_agent_or_git {
                 ExitCode::SUCCESS
             } else {
@@ -37,7 +39,7 @@ fn main() -> ExitCode {
         Cmd::PrePush { git_args } => Ok(commands::pre_push::run(&env, &git_args)),
     };
     outcome.unwrap_or_else(|error| {
-        eprintln!("jarvis: {error:#}");
+        message::error(&format!("{error:#}"));
         ExitCode::FAILURE
     })
 }

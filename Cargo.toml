@@ -6,6 +6,8 @@ description = "Proof of concept: puts my working standards into every AI agent s
 publish = false
 
 [dependencies]
+anstream = "1.0.0"
+anstyle = "1.0.14"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 regex = "1"

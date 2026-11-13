@@ -1,6 +1,7 @@
 use crate::agents::{self, hooks_file, skills};
 use crate::git::hook_config;
 use crate::paths::Env;
+use crate::ui::message;
 use anyhow::Result;
 use std::fs;
 use std::process::ExitCode;
@@ -15,6 +16,6 @@ pub fn run(env: &Env) -> Result<ExitCode> {
         fs::remove_dir_all(env.jarvis_dir())?;
     }
 
-    println!("Removed jarvis from {}.", env.home.display());
+    message::done("jarvis", &format!("removed from {}", env.home.display()));
     Ok(ExitCode::SUCCESS)
 }

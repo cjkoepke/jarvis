@@ -5,7 +5,8 @@ use std::path::PathBuf;
 #[command(
     name = "jarvis",
     version,
-    about = "Puts your working standards into every agent session and reviews changes before push."
+    about = "Puts your working standards into every agent session and reviews changes before push.",
+    styles = crate::ui::style::help_styles()
 )]
 pub struct Cli {
     #[arg(long, global = true, help = "Home directory to install into and read from. Defaults to $HOME.")]

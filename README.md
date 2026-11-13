@@ -57,6 +57,7 @@ Run `jarvis install` again after changing the standards.
 | `src/cli.rs` | Command-line definition. |
 | `src/commands/` | One file per command: `install`, `uninstall`, `doctor`, `hook`, `pre_push`. |
 | `src/agents/` | One file per agent, plus hook-file editing, skill copying and doctor checks. |
+| `src/ui/` | The colour palette and styled messages commands print through. |
 | `src/rules/` | Rule loading, evaluation and fixes. |
 | `src/git/` | Git hook registration, outgoing-commit inspection and the fix commit. |
 | `src/standards.rs` | Loading `core/`, `skills/` and `rules/`, and the context text. |
