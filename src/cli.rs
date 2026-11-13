@@ -53,7 +53,7 @@ pub enum Format {
 pub struct InstallArgs {
     #[arg(
         long,
-        help = "Folder holding core/, skills/ and rules/. Defaults to the last install's folder, then ./standards."
+        help = "Folder holding core/ and skills/. Defaults to the last install's folder, then ./standards."
     )]
     pub standards: Option<PathBuf>,
     #[arg(

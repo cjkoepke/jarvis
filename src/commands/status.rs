@@ -5,6 +5,7 @@ use crate::files::same_contents;
 use crate::git::hook_config::{self, Registration, MINIMUM_GIT_VERSION};
 use crate::paths::Env;
 use crate::record::InstallRecord;
+use crate::review::reviewer;
 use crate::standards::{Standards, CORE_MAX_CHARS};
 use crate::ui::{message, Tone};
 use anyhow::Result;
@@ -21,6 +22,10 @@ const GIT_VERSION: CheckSubject = CheckSubject {
 const GIT_REVIEW: CheckSubject = CheckSubject {
     area: "Git",
     name: "pre-push review",
+};
+const GIT_REVIEWER: CheckSubject = CheckSubject {
+    area: "Git",
+    name: "reviewer",
 };
 
 pub fn run(env: &Env, format: Format) -> Result<ExitCode> {
@@ -53,6 +58,7 @@ fn gather(env: &Env) -> Vec<Check> {
     }
     checks.push(git_version_check());
     checks.push(git_review_check(env));
+    checks.push(git_reviewer_check(env));
     checks
 }
 
@@ -73,10 +79,9 @@ fn print_summary(checks: &[Check]) {
 
 fn standards_check(env: &Env, record: &InstallRecord, standards: &Standards) -> Check {
     let contents = format!(
-        "core {} of {CORE_MAX_CHARS} characters · {} skills · {} rules",
+        "core {} of {CORE_MAX_CHARS} characters · {} skills",
         standards.core.chars().count(),
-        standards.skills.len(),
-        standards.rules.len()
+        standards.skills.len()
     );
     let source = &record.standards_source;
     if !source.is_dir() {
@@ -119,5 +124,12 @@ fn git_review_check(env: &Env) -> Check {
             gitconfig.display()
         )),
         Registration::SwitchedOff => GIT_REVIEW.warn(format!("switched off by `hook.jarvis.enabled` in {}", gitconfig.display())),
+    }
+}
+
+fn git_reviewer_check(env: &Env) -> Check {
+    match reviewer::choose(env) {
+        Some(agent) => GIT_REVIEWER.ok(agent.display_name()),
+        None => GIT_REVIEWER.warn("no installed agent is on PATH, so pushes go out unreviewed"),
     }
 }

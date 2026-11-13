@@ -1,11 +1,11 @@
 # jarvis
 
 A personal tool for better agent work. One folder of standards reaches every
-AI agent session and sub-agent on the machine, and a review before every
-`git push` fixes what the context missed.
+AI agent session and sub-agent on the machine, and an agent reviews every
+`git push` against the same standards.
 
 This is a proof of concept. `standards/core/core.md` is the real Constitution;
-the skill and the rules are samples marked `@TODO`.
+the `commenting` skill is a sample marked `@TODO`.
 
 ## Try it in a throwaway home
 
@@ -29,14 +29,15 @@ Without `--home`, `install` and `uninstall` act on your real home directory:
   `standards/core/`. Skills in `standards/skills/` are copied to where each
   agent looks for them. Codex needs its hooks approved once with `/hooks`.
 - **Review before push.** `install` adds a `pre-push` hook to the global git
-  config (Git 2.54 or newer). It checks the outgoing commits against
-  `standards/rules/`. A `block` finding refuses the push. `fix` findings are
-  corrected in one additional commit; git cannot add a commit to a push that
-  is already under way, so that push stops and the next one sends it. `report`
-  findings are printed and the push goes ahead. The result is printed to the
-  caller, so an agent that ran `git push` reads it as the command's output.
+  config (Git 2.54 or newer). It hands the commits the remote lacks, their
+  diff, the whole core and the list of skills to a headless agent: Claude Code
+  on its newest model, or Codex when Claude Code is not installed. The reviewer
+  can read the working tree and the skill files and cannot change anything.
+  Violations refuse the push and are printed to the caller, so an agent that
+  ran `git push` reads them as the command's output, fixes them and pushes
+  again. A review that cannot run never stops a push.
 - **Status.** `jarvis status` shows a table of checks on the standards, each
-  agent's hooks and skills, and the git hook. `--format json` prints the same for
+  agent's hooks and skills, the git hook and the reviewer. `--format json` prints the same for
   an agent. It only reports, and each failed row says how to fix it.
 
 ## Standards folder
@@ -44,11 +45,7 @@ Without `--home`, `install` and `uninstall` act on your real home directory:
 | Folder | Used for |
 | --- | --- |
 | `core/*.md` | Always in context. Capped at 6,000 characters. |
-| `skills/<name>/SKILL.md` | Loaded by the agent when a task needs it. |
-| `rules/*.toml` | Checked before push. `level` is `report`, `fix` or `block`. |
-
-Rule kinds: `forbidden-path`, `forbidden-content` (added lines only),
-`final-newline` and `trailing-whitespace` (the two the review can fix).
+| `skills/<name>/SKILL.md` | Loaded by the agent when a task needs it, and by the reviewer when it bears on a push. |
 
 After changing the standards, `jarvis status` reports the installed copy as out
 of date. A bare `jarvis install` refreshes it from any directory: it reuses the
@@ -62,17 +59,18 @@ standards folder and agents of the last install.
 | `src/commands/` | One file per command: `install`, `uninstall`, `status`, `hook`, `pre_push`. |
 | `src/agents/` | One file per agent, plus hook-file editing, skill copying and status checks. |
 | `src/check/` | The check type and its table and JSON output. |
-| `src/ui/` | The colour palette and styled messages commands print through. |
-| `src/rules/` | Rule loading, evaluation and fixes. |
-| `src/git/` | Git hook registration, outgoing-commit inspection and the fix commit. |
-| `src/standards.rs` | Loading `core/`, `skills/` and `rules/`, and the context text. |
+| `src/ui/` | The colour palette and styled messages every command prints through. |
+| `src/review/` | The review prompt, running the reviewer and reading its verdict. |
+| `src/git/` | Git hook registration and outgoing-commit inspection. |
+| `src/standards.rs` | Loading `core/` and `skills/`, and the context text. |
 
 To support another agent, add a file in `src/agents/` that implements `Agent`
 and list it in `all()`.
 
 ## Not built yet
 
-- The review only runs rules a program can decide. No model reads the change.
+- The reviewer only reports. It does not fix what it finds.
+- A push with more than 200,000 characters of diff goes out unreviewed.
 - No repo bootstrap or sync.
 - Codex delivery only works once the hooks are approved with `/hooks`. Until
   then Codex skips them and sessions start without the standards.

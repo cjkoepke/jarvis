@@ -1,8 +1,0 @@
-# @TODO: sample rule that exercises the review. Replace or remove it once real rules are written.
-id = "no-debug-leftovers"
-description = "Debugging output is not left in committed code."
-level = "report"
-kind = "forbidden-content"
-pattern = 'console\.log\(|dbg!\(|\bdebugger\b'
-paths = '\.(rs|ts|tsx|js|jsx)$'
-message = "Remove the debugging statement or replace it with real logging."

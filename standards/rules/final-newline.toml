@@ -1,6 +1,0 @@
-# @TODO: sample rule that exercises the review. Replace or remove it once real rules are written.
-id = "final-newline"
-description = "Text files end with exactly one newline."
-level = "fix"
-kind = "final-newline"
-message = "File must end with exactly one newline."

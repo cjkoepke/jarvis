@@ -8,7 +8,8 @@ pub mod skills;
 use crate::paths::Env;
 use anyhow::{Context, Result};
 use serde_json::json;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 pub enum Approval {
     NotRequired,
@@ -17,7 +18,8 @@ pub enum Approval {
 }
 
 /// @agent To support another agent, add one file implementing this trait and list
-/// it in `all()`. Hook registration, skills and status checks need no changes.
+/// it in `all()`. Hook registration, skills, status checks and the review need no
+/// changes.
 pub trait Agent: Sync {
     fn id(&self) -> &'static str;
     fn display_name(&self) -> &'static str;
@@ -25,6 +27,11 @@ pub trait Agent: Sync {
     fn hooks_file(&self, env: &Env) -> PathBuf;
     fn skills_dir(&self, env: &Env) -> PathBuf;
     fn context_events(&self) -> &'static [&'static str];
+
+    /// @agent Must build a headless run that reads the review prompt on stdin, prints
+    /// only its reply on stdout, and cannot change files. `standards_dir` holds the
+    /// skill files the prompt points to, which sit outside the repository.
+    fn review_command(&self, standards_dir: &Path) -> Command;
 
     fn approval(&self, _env: &Env) -> Approval {
         Approval::NotRequired

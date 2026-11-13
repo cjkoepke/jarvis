@@ -1,5 +1,4 @@
 use crate::files::{has_extension, sorted_entries};
-use crate::rules::{self, Rule};
 use anyhow::{bail, Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -9,15 +8,24 @@ use std::path::{Path, PathBuf};
 /// core this long stops being followed.
 pub const CORE_MAX_CHARS: usize = 6000;
 
+const SKILL_FILE: &str = "SKILL.md";
+const DESCRIPTION_FIELD: &str = "description:";
+
 pub struct Skill {
     pub name: String,
+    pub description: String,
     pub dir: PathBuf,
+}
+
+impl Skill {
+    pub fn file(&self) -> PathBuf {
+        self.dir.join(SKILL_FILE)
+    }
 }
 
 pub struct Standards {
     pub core: String,
     pub skills: Vec<Skill>,
-    pub rules: Vec<Rule>,
 }
 
 impl Standards {
@@ -25,7 +33,6 @@ impl Standards {
         Ok(Standards {
             core: load_core(&root.join("core"))?,
             skills: load_skills(&root.join("skills"))?,
-            rules: rules::load_dir(&root.join("rules"))?,
         })
     }
 
@@ -76,11 +83,18 @@ fn load_skills(dir: &Path) -> Result<Vec<Skill>> {
     if !dir.is_dir() {
         return Ok(Vec::new());
     }
-    let skill_dirs = sorted_entries(dir)?.into_iter().filter(|path| path.join("SKILL.md").is_file());
+    let skill_dirs = sorted_entries(dir)?.into_iter().filter(|path| path.join(SKILL_FILE).is_file());
     Ok(skill_dirs
         .map(|dir| Skill {
             name: dir.file_name().unwrap_or_default().to_string_lossy().into_owned(),
+            description: description(&dir.join(SKILL_FILE)),
             dir,
         })
         .collect())
+}
+
+fn description(skill_file: &Path) -> String {
+    let text = fs::read_to_string(skill_file).unwrap_or_default();
+    let field = text.lines().find_map(|line| line.strip_prefix(DESCRIPTION_FIELD));
+    field.unwrap_or_default().trim().to_string()
 }

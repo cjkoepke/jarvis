@@ -20,3 +20,15 @@ pub fn summary(tone: Tone, text: &str) {
 pub fn error(text: &str) {
     eprintln!("{} {text}", Tone::Bad.paint("error:"));
 }
+
+/// @agent The review prints on stderr between git's own lines, so every line
+/// carries the `jarvis` prefix to show where it came from.
+pub fn review_findings(text: &str) {
+    for line in text.lines() {
+        eprintln!("{} {line}", Tone::Muted.paint("jarvis"));
+    }
+}
+
+pub fn review_verdict(tone: Tone, text: &str) {
+    eprintln!("{} {}", Tone::Muted.paint("jarvis"), tone.paint(text));
+}

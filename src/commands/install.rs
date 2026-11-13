@@ -24,10 +24,9 @@ pub fn run(env: &Env, args: &InstallArgs) -> Result<ExitCode> {
     message::done(
         "standards",
         &format!(
-            "copied to {} ({} skills, {} rules)",
+            "copied to {} ({} skills)",
             env.installed_standards_dir().display(),
-            standards.skills.len(),
-            standards.rules.len()
+            standards.skills.len()
         ),
     );
 

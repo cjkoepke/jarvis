@@ -1,4 +1,3 @@
-pub mod fix_commit;
 pub mod hook_config;
 pub mod outgoing;
 

@@ -1,7 +1,0 @@
-# @TODO: sample rule that exercises the review. Replace or remove it once real rules are written.
-id = "no-trailing-whitespace"
-description = "Lines do not end in spaces or tabs."
-level = "fix"
-kind = "trailing-whitespace"
-paths = '\.(rs|ts|tsx|js|jsx|py|go|toml|json|ya?ml|sh)$'
-message = "Remove trailing whitespace."

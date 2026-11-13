@@ -6,7 +6,7 @@ mod files;
 mod git;
 mod paths;
 mod record;
-mod rules;
+mod review;
 mod standards;
 mod ui;
 
