@@ -6,6 +6,7 @@ use crate::git::hook_config::{self, Registration, MINIMUM_GIT_VERSION};
 use crate::paths::Env;
 use crate::record::InstallRecord;
 use crate::review::reviewer;
+use crate::settings::ReviewSettings;
 use crate::standards::{Standards, CORE_MAX_CHARS};
 use crate::ui::{message, Tone};
 use anyhow::Result;
@@ -46,11 +47,12 @@ pub fn run(env: &Env, format: Format) -> Result<ExitCode> {
 
 fn gather(env: &Env) -> Vec<Check> {
     let mut checks = Vec::new();
-    match (InstallRecord::load(env), Standards::load(&env.installed_standards_dir())) {
+    let standards = Standards::load(&env.installed_standards_dir());
+    match (InstallRecord::load(env), &standards) {
         (Some(record), Ok(standards)) => {
-            checks.push(standards_check(env, &record, &standards));
+            checks.push(standards_check(env, &record, standards));
             for agent in record.agent_ids.iter().filter_map(|id| agents::by_id(id)) {
-                checks.extend(agents::checks::run(agent, env, &standards));
+                checks.extend(agents::checks::run(agent, env, standards));
             }
         }
         (Some(_), Err(error)) => checks.push(STANDARDS.fail(format!("{error:#}; run `jarvis install`"))),
@@ -58,7 +60,9 @@ fn gather(env: &Env) -> Vec<Check> {
     }
     checks.push(git_version_check());
     checks.push(git_review_check(env));
-    checks.push(git_reviewer_check(env));
+    if let Ok(standards) = &standards {
+        checks.push(git_reviewer_check(&standards.settings.review));
+    }
     checks
 }
 
@@ -127,9 +131,9 @@ fn git_review_check(env: &Env) -> Check {
     }
 }
 
-fn git_reviewer_check(env: &Env) -> Check {
-    match reviewer::choose(env) {
-        Some(agent) => GIT_REVIEWER.ok(agent.display_name()),
-        None => GIT_REVIEWER.warn("no installed agent is on PATH, so pushes go out unreviewed"),
+fn git_reviewer_check(settings: &ReviewSettings) -> Check {
+    match reviewer::choose(settings) {
+        Ok(reviewer) => GIT_REVIEWER.ok(reviewer.to_string()),
+        Err(error) => GIT_REVIEWER.warn(format!("{error:#}, so pushes go out unreviewed")),
     }
 }

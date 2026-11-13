@@ -3,9 +3,6 @@ use crate::paths::Env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// @agent Claude Code's alias for its newest model, so the review stays on the
-/// frontier without a version to update here.
-const REVIEW_MODEL: &str = "fable";
 const READ_ONLY_TOOLS: &str = "Read,Grep,Glob";
 
 /// @agent `SubagentStart` is registered as well as `SessionStart` because Claude
@@ -41,13 +38,16 @@ impl Agent for Claude {
     /// @agent `--safe-mode` keeps hooks, plugins, MCP servers and CLAUDE.md out of the
     /// review, so it judges against the standards alone and does not pay for their
     /// context. `--add-dir` is what lets it read the skill files.
-    fn review_command(&self, standards_dir: &Path) -> Command {
+    fn review_command(&self, standards_dir: &Path, model: Option<&str>) -> Command {
         let mut command = Command::new(self.executable_name());
         command
-            .args(["--print", "--model", REVIEW_MODEL, "--tools", READ_ONLY_TOOLS])
+            .args(["--print", "--tools", READ_ONLY_TOOLS])
             .args(["--safe-mode", "--no-session-persistence", "--permission-prompts", "none"])
             .arg("--add-dir")
             .arg(standards_dir);
+        if let Some(model) = model {
+            command.args(["--model", model]);
+        }
         command
     }
 }

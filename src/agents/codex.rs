@@ -37,12 +37,13 @@ impl Agent for Codex {
         codex_trust::approval(self, env)
     }
 
-    /// @agent Codex has no alias for its newest model, so the review runs on the
-    /// model `~/.codex/config.toml` selects. Its read-only sandbox can already read
-    /// outside the repository, so `standards_dir` needs no flag.
-    fn review_command(&self, _standards_dir: &Path) -> Command {
+    fn review_command(&self, _standards_dir: &Path, model: Option<&str>) -> Command {
         let mut command = Command::new(self.executable_name());
-        command.args(["exec", "--skip-git-repo-check", "--sandbox", "read-only", "--ephemeral", "-"]);
+        command.args(["exec", "--skip-git-repo-check", "--sandbox", "read-only", "--ephemeral"]);
+        if let Some(model) = model {
+            command.args(["--model", model]);
+        }
+        command.arg("-");
         command
     }
 }

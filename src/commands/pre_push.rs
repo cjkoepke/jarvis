@@ -27,16 +27,13 @@ fn review(env: &Env, git_args: &[String]) -> Result<ExitCode> {
     }
 
     let standards = Standards::load(&env.installed_standards_dir())?;
-    let reviewer = reviewer::choose(env).context("no installed agent is on PATH")?;
+    let reviewer = reviewer::choose(&standards.settings.review)?;
     message::review_verdict(
         Tone::Muted,
-        &format!(
-            "{} is reviewing the outgoing commits. This can take a few minutes.",
-            reviewer.display_name()
-        ),
+        &format!("{reviewer} is reviewing the outgoing commits. This can take a few minutes."),
     );
 
-    let reply = reviewer::ask(reviewer, env, &prompt::build(&standards, &outgoing))?;
+    let reply = reviewer::ask(&reviewer, env, &prompt::build(&standards, &outgoing))?;
     let review = verdict::parse(&reply).context("the reviewer gave no verdict")?;
     message::review_findings(&review.findings);
     Ok(match review.verdict {

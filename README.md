@@ -30,9 +30,8 @@ Without `--home`, `install` and `uninstall` act on your real home directory:
   agent looks for them. Codex needs its hooks approved once with `/hooks`.
 - **Review before push.** `install` adds a `pre-push` hook to the global git
   config (Git 2.54 or newer). It hands the commits the remote lacks, their
-  diff, the whole core and the list of skills to a headless agent: Claude Code
-  on its newest model, or Codex when Claude Code is not installed. The reviewer
-  can read the working tree and the skill files and cannot change anything.
+  diff, the whole core and the list of skills to the headless agent that
+  `settings.toml` names. The reviewer can read the working tree and the skill files and cannot change anything.
   Violations refuse the push and are printed to the caller, so an agent that
   ran `git push` reads them as the command's output, fixes them and pushes
   again. A review that cannot run never stops a push.
@@ -46,6 +45,7 @@ Without `--home`, `install` and `uninstall` act on your real home directory:
 | --- | --- |
 | `core/*.md` | Always in context. Capped at 6,000 characters. |
 | `skills/<name>/SKILL.md` | Loaded by the agent when a task needs it, and by the reviewer when it bears on a push. |
+| `settings.toml` | `[review]`: `agent` reviews pushes (`claude` or `codex`, default `claude`) on `model` (default: the agent's own). |
 
 After changing the standards, `jarvis status` reports the installed copy as out
 of date. A bare `jarvis install` refreshes it from any directory: it reuses the

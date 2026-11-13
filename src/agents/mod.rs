@@ -31,7 +31,7 @@ pub trait Agent: Sync {
     /// @agent Must build a headless run that reads the review prompt on stdin, prints
     /// only its reply on stdout, and cannot change files. `standards_dir` holds the
     /// skill files the prompt points to, which sit outside the repository.
-    fn review_command(&self, standards_dir: &Path) -> Command;
+    fn review_command(&self, standards_dir: &Path, model: Option<&str>) -> Command;
 
     fn approval(&self, _env: &Env) -> Approval {
         Approval::NotRequired
