@@ -70,7 +70,6 @@ and list it in `all()`.
 ## Not built yet
 
 - The reviewer only reports. It does not fix what it finds.
-- A push with more than 200,000 characters of diff goes out unreviewed.
 - No repo bootstrap or sync.
 - Codex delivery only works once the hooks are approved with `/hooks`. Until
   then Codex skips them and sessions start without the standards.

@@ -4,14 +4,10 @@ use crate::review::verdict::{self, Verdict};
 use crate::review::{prompt, reviewer};
 use crate::standards::Standards;
 use crate::ui::{message, Tone};
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::io::Read;
 use std::process::ExitCode;
-
-/// @agent Caps what one review can cost: about 50,000 tokens of diff. A larger
-/// push goes out unreviewed, and says so.
-const MAX_DIFF_CHARS: usize = 200_000;
 
 /// @agent Any internal error lets the push through. The review exists to improve
 /// what goes out, so it must never be the reason a push cannot happen. Output goes
@@ -28,10 +24,6 @@ fn review(env: &Env, git_args: &[String]) -> Result<ExitCode> {
     let outgoing = outgoing_commits(git_args.first().map(String::as_str))?;
     if outgoing.is_empty() {
         return Ok(ExitCode::SUCCESS);
-    }
-    let diff_size: usize = outgoing.iter().map(|pushed| pushed.diff.chars().count()).sum();
-    if diff_size > MAX_DIFF_CHARS {
-        bail!("the diff is {diff_size} characters and the review reads at most {MAX_DIFF_CHARS}");
     }
 
     let standards = Standards::load(&env.installed_standards_dir())?;
