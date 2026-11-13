@@ -12,14 +12,7 @@ pub fn run(env: &Env, agent_id: &str, event: &str) -> ExitCode {
         return ExitCode::SUCCESS;
     };
     match Standards::load(&env.installed_standards_dir()) {
-        Ok(standards) => {
-            let context = if event == "SubagentStart" {
-                standards.subagent_context()
-            } else {
-                standards.session_context()
-            };
-            println!("{}", agent.hook_reply(event, &context));
-        }
+        Ok(standards) => println!("{}", agent.hook_reply(event, &standards.core)),
         Err(error) => message::error(&format!("no standards delivered ({error:#})")),
     }
     ExitCode::SUCCESS

@@ -14,27 +14,14 @@ const REVIEW: Spec = Spec {
     file: "review.md",
     variables: &["core", "skills", "commits", "diff", "pass", "fail"],
 };
-const SESSION: Spec = Spec {
-    file: "session.md",
-    variables: &["core", "skills"],
-};
-const SUBAGENT: Spec = Spec {
-    file: "subagent.md",
-    variables: &["core"],
-};
-
 pub struct Prompts {
     pub review: Prompt,
-    pub session: Prompt,
-    pub subagent: Prompt,
 }
 
 impl Prompts {
     pub fn load(dir: &Path) -> Result<Prompts> {
         Ok(Prompts {
             review: Prompt::load(dir, &REVIEW)?,
-            session: Prompt::load(dir, &SESSION)?,
-            subagent: Prompt::load(dir, &SUBAGENT)?,
         })
     }
 }

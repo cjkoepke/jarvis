@@ -63,19 +63,16 @@ here.
 | File | Sent | Variables |
 | --- | --- | --- |
 | `review.md` | To the reviewer before each push. | `core`, `skills`, `commits`, `diff`, `pass`, `fail` |
-| `session.md` | At each session start. | `core`, `skills` |
-| `subagent.md` | At each sub-agent start. | `core` |
 
 | Variable | Holds |
 | --- | --- |
 | `core` | The core files, joined. |
-| `skills` | In `session.md`, the skill names. In `review.md`, each skill's name, description and file. |
+| `skills` | Each skill's name, description and file. |
 | `commits` | The messages of the commits the remote lacks. |
 | `diff` | Their diff. |
 | `pass`, `fail` | The verdict line the reviewer must end with. |
 
-Write the hook prompts as statements of fact. Claude Code can treat injected
-commands as a prompt injection ([hooks](https://code.claude.com/docs/en/hooks)).
+Session and sub-agent hooks send the core as it is, with nothing around it.
 
 ## Source layout
 

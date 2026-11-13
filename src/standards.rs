@@ -41,17 +41,6 @@ impl Standards {
             settings: Settings::load(&root.join("settings.toml"))?,
         })
     }
-
-    pub fn session_context(&self) -> String {
-        let skill_names: Vec<&str> = self.skills.iter().map(|skill| skill.name.as_str()).collect();
-        self.prompts
-            .session
-            .render(&[("core", &self.core), ("skills", &skill_names.join(", "))])
-    }
-
-    pub fn subagent_context(&self) -> String {
-        self.prompts.subagent.render(&[("core", &self.core)])
-    }
 }
 
 fn load_core(dir: &Path) -> Result<String> {
