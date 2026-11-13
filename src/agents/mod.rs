@@ -11,7 +11,7 @@ use std::fs;
 use std::path::PathBuf;
 
 /// @agent To support another agent, add one file implementing this trait and list
-/// it in `all()`. Hook registration, skills and doctor checks need no changes.
+/// it in `all()`. Hook registration, skills and status checks need no changes.
 pub trait Agent: Sync {
     fn id(&self) -> &'static str;
     fn display_name(&self) -> &'static str;
@@ -57,6 +57,10 @@ pub fn installed(env: &Env) -> Vec<&'static dyn Agent> {
     ids.lines().filter_map(by_id).collect()
 }
 
+pub fn hook_subcommand(agent: &dyn Agent, event: &str) -> String {
+    format!("hook {} {event}", agent.id())
+}
+
 pub fn hook_command(agent: &dyn Agent, env: &Env, event: &str) -> String {
-    env.shell_command(&format!("hook {} {event}", agent.id()))
+    env.shell_command(&hook_subcommand(agent, event))
 }

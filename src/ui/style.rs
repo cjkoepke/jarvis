@@ -19,6 +19,16 @@ impl Tone {
         format!("{style}{text}{style:#}")
     }
 
+    pub fn table_color(self) -> Option<comfy_table::Color> {
+        match self {
+            Tone::Good => Some(comfy_table::Color::Green),
+            Tone::Caution => Some(comfy_table::Color::Yellow),
+            Tone::Bad => Some(comfy_table::Color::Red),
+            Tone::Muted => Some(comfy_table::Color::DarkGrey),
+            Tone::Strong => None,
+        }
+    }
+
     fn style(self) -> Style {
         match self {
             Tone::Good => AnsiColor::BrightGreen.on_default().bold(),

@@ -13,7 +13,7 @@ the skill and the rules are samples marked `@TODO`.
 cargo build
 mkdir -p /tmp/jarvis-home
 target/debug/jarvis --home /tmp/jarvis-home install
-target/debug/jarvis --home /tmp/jarvis-home doctor
+target/debug/jarvis --home /tmp/jarvis-home status
 target/debug/jarvis --home /tmp/jarvis-home hook claude SessionStart
 target/debug/jarvis --home /tmp/jarvis-home uninstall
 ```
@@ -35,7 +35,9 @@ Without `--home`, `install` and `uninstall` act on your real home directory:
   is already under way, so that push stops and the next one sends it. `report`
   findings are printed and the push goes ahead. The result is printed to the
   caller, so an agent that ran `git push` reads it as the command's output.
-- **Doctor.** Checks the standards, each agent's hooks and skills, and the git hook.
+- **Status.** `jarvis status` shows a table of checks on the standards, each
+  agent's hooks and skills, and the git hook. `--format json` prints the same for
+  an agent. It only reports, and each failed row says how to fix it.
 
 ## Standards folder
 
@@ -55,8 +57,9 @@ Run `jarvis install` again after changing the standards.
 | Path | Holds |
 | --- | --- |
 | `src/cli.rs` | Command-line definition. |
-| `src/commands/` | One file per command: `install`, `uninstall`, `doctor`, `hook`, `pre_push`. |
-| `src/agents/` | One file per agent, plus hook-file editing, skill copying and doctor checks. |
+| `src/commands/` | One file per command: `install`, `uninstall`, `status`, `hook`, `pre_push`. |
+| `src/agents/` | One file per agent, plus hook-file editing, skill copying and status checks. |
+| `src/check/` | The check type and its table and JSON output. |
 | `src/ui/` | The colour palette and styled messages commands print through. |
 | `src/rules/` | Rule loading, evaluation and fixes. |
 | `src/git/` | Git hook registration, outgoing-commit inspection and the fix commit. |

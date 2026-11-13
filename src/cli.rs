@@ -1,4 +1,4 @@
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -21,8 +21,11 @@ pub enum Cmd {
     Install(InstallArgs),
     #[command(about = "Remove everything `install` added and nothing else.")]
     Uninstall,
-    #[command(about = "Check that the standards, agent hooks, skills and git review are in place.")]
-    Doctor,
+    #[command(about = "Show whether the standards, agent hooks, skills and git review are in place.")]
+    Status {
+        #[arg(long, value_enum, default_value_t = Format::Table, help = "`table` for a person, `json` for an agent.")]
+        format: Format,
+    },
     #[command(hide = true)]
     Hook { agent: String, event: String },
     #[command(hide = true, name = "pre-push")]
@@ -38,6 +41,12 @@ impl Cmd {
     pub fn runs_inside_agent_or_git(&self) -> bool {
         matches!(self, Cmd::Hook { .. } | Cmd::PrePush { .. })
     }
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum Format {
+    Table,
+    Json,
 }
 
 #[derive(Args)]

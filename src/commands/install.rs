@@ -32,7 +32,7 @@ pub fn run(env: &Env, args: &InstallArgs) -> Result<ExitCode> {
     hook_config::register(env)?;
     message::done("git", &format!("pre-push review in {}", env.global_gitconfig().display()));
 
-    message::summary(Tone::Good, "Installed. Run `jarvis doctor` to check it.");
+    message::summary(Tone::Good, "Installed. Run `jarvis status` to check it.");
     Ok(ExitCode::SUCCESS)
 }
 

@@ -46,8 +46,42 @@ impl Env {
             single_quoted(&self.home)
         )
     }
+
+    /// The jarvis executable `command` runs, when it is `subcommand` aimed at this home.
+    ///
+    /// @agent Deliberately accepts any jarvis binary. Hooks registered by the
+    /// installed binary must still count when `status` runs from another build.
+    pub fn executable_in(&self, command: &str, subcommand: &str) -> Option<PathBuf> {
+        let aimed_at_this_home = format!(" --home {} {subcommand}", single_quoted(&self.home));
+        let quoted_executable = command.strip_suffix(&aimed_at_this_home)?;
+        let executable = quoted_executable.strip_prefix('\'')?.strip_suffix('\'')?;
+        Some(PathBuf::from(executable.replace(ESCAPED_QUOTE, "'")))
+    }
 }
 
+const ESCAPED_QUOTE: &str = r"'\''";
+
 fn single_quoted(path: &Path) -> String {
-    format!("'{}'", path.to_string_lossy().replace('\'', r"'\''"))
+    format!("'{}'", path.to_string_lossy().replace('\'', ESCAPED_QUOTE))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_registered_command_gives_back_its_executable_only_for_its_own_subcommand() {
+        let home = tempfile::tempdir().unwrap();
+        let env = Env {
+            home: home.path().canonicalize().unwrap(),
+            jarvis_executable: PathBuf::from("/opt/it's here/jarvis"),
+        };
+        let registered = env.shell_command("hook claude SessionStart");
+
+        assert_eq!(
+            env.executable_in(&registered, "hook claude SessionStart"),
+            Some(env.jarvis_executable.clone())
+        );
+        assert_eq!(env.executable_in(&registered, "pre-push"), None);
+    }
 }
