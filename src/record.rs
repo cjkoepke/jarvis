@@ -4,9 +4,6 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-/// @agent Written by `install`. It lets `status` compare the installed standards
-/// with their source, and lets a later `jarvis install` repeat itself from any
-/// directory without flags.
 #[derive(Serialize, Deserialize)]
 pub struct InstallRecord {
     pub standards_source: PathBuf,

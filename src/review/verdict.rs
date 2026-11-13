@@ -12,8 +12,6 @@ pub struct Review {
     pub findings: String,
 }
 
-/// @agent Only the last line counts, and it is matched loosely because models wrap
-/// it in backticks or bold. `None` means the reply cannot be trusted as a review.
 pub fn parse(reply: &str) -> Option<Review> {
     let reply = reply.trim();
     let (findings, last_line) = reply.rsplit_once('\n').unwrap_or(("", reply));

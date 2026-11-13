@@ -13,8 +13,6 @@ use std::process::ExitCode;
 
 const DEFAULT_STANDARDS: &str = "standards";
 
-/// @agent Flags left out fall back to the previous install's values, so a bare
-/// `jarvis install` repairs or refreshes an install from any directory.
 pub fn run(env: &Env, args: &InstallArgs) -> Result<ExitCode> {
     let previous = InstallRecord::load(env);
     let source = standards_source(args, previous.as_ref())?;
@@ -98,8 +96,6 @@ fn install_for_agent(agent: &dyn Agent, env: &Env, standards: &Standards) -> Res
     Ok(())
 }
 
-/// @agent Without this, narrowing `--agents` would leave the dropped agent's hooks
-/// and skills active while `status` stopped reporting on them.
 fn remove_unselected_agents(env: &Env, selected: &[&dyn Agent], previous: Option<&InstallRecord>) -> Result<()> {
     let is_selected = |agent: &dyn Agent| selected.iter().any(|kept| kept.id() == agent.id());
     for agent in agents::all().into_iter().filter(|agent| !is_selected(*agent)) {

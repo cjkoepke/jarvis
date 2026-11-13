@@ -48,9 +48,6 @@ impl Env {
     }
 
     /// The jarvis executable `command` runs, when it is `subcommand` aimed at this home.
-    ///
-    /// @agent Deliberately accepts any jarvis binary. Hooks registered by the
-    /// installed binary must still count when `status` runs from another build.
     pub fn executable_in(&self, command: &str, subcommand: &str) -> Option<PathBuf> {
         let aimed_at_this_home = format!(" --home {} {subcommand}", single_quoted(&self.home));
         let quoted_executable = command.strip_suffix(&aimed_at_this_home)?;

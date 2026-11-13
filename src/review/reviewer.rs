@@ -37,8 +37,6 @@ pub fn choose(settings: &ReviewSettings) -> Result<Reviewer<'_>> {
     })
 }
 
-/// @agent The prompt, reply and errors go through files, not pipes, so a reviewer
-/// that writes more than a pipe holds cannot stall while this waits on the limit.
 pub fn ask(reviewer: &Reviewer, env: &Env, prompt: &str) -> Result<String> {
     let agent = reviewer.agent;
     let scratch = tempfile::tempdir()?;

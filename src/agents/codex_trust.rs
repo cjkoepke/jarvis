@@ -8,12 +8,7 @@ use toml::{Table, Value};
 const HOW_TO_APPROVE: &str = "open Codex, run /hooks and approve the jarvis hooks; Codex ignores them until then";
 const HOW_TO_ENABLE: &str = "open Codex, run /hooks and switch the jarvis hooks back on";
 
-/// @agent Codex keeps one entry per approved hook in `~/.codex/config.toml` under
-/// `[hooks.state."<hooks.json path>:<event>:<group>:<handler>"]`; see `hook_key` in
-/// https://github.com/openai/codex/blob/main/codex-rs/hooks/src/lib.rs. This checks
-/// that the entry exists and is enabled. Codex additionally compares `trusted_hash`
-/// with a hash of the hook, so a command that changed after approval reads as
-/// approved here while Codex asks for approval again.
+/// @agent https://github.com/openai/codex/blob/main/codex-rs/hooks/src/lib.rs (`hook_key`)
 pub fn approval(agent: &dyn Agent, env: &Env) -> Approval {
     let hooks = hooks_file::registered(agent, env);
     let states = hook_states(env).unwrap_or_default();

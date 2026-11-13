@@ -1,9 +1,6 @@
 use anstyle::{AnsiColor, Style};
 use clap::builder::Styles;
 
-/// @agent The one palette for the whole CLI. Print painted text through
-/// `anstream`, which strips the colour codes when the output is not a terminal,
-/// so agents and pipes receive plain text.
 #[derive(Clone, Copy)]
 pub enum Tone {
     Good,
@@ -14,7 +11,7 @@ pub enum Tone {
 }
 
 impl Tone {
-    pub fn paint(self, text: &str) -> String {
+    pub(super) fn paint(self, text: &str) -> String {
         let style = self.style();
         format!("{style}{text}{style:#}")
     }

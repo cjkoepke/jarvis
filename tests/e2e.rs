@@ -10,9 +10,7 @@ const FAKE_REVIEWER: &str = "#!/bin/sh\ncat > \"$(dirname \"$0\")/prompt\"\ncat 
 
 /// @agent This harness exists because no third-party crate gives a throwaway home
 /// directory together with a git whose global config lives in it. Every git call
-/// must go through `git()` so the real user and system config are never read, and
-/// so the pre-push review runs `FAKE_REVIEWER` instead of a real agent. The fake
-/// records the prompt it was given and answers with the `reply` file.
+/// must go through `git()` so the real user and system config are never read.
 struct Sandbox {
     _dir: TempDir,
     home: PathBuf,
@@ -163,6 +161,7 @@ fn install_and_uninstall_leave_existing_configuration_alone() {
     sandbox.install();
     let installed = read_json(&settings);
     assert_eq!(installed["hooks"]["SessionStart"].as_array().unwrap().len(), 2);
+    assert_eq!(installed["hooks"]["SessionStart"][0]["hooks"][0]["command"], "echo mine");
     assert_eq!(installed["hooks"]["SubagentStart"].as_array().unwrap().len(), 1);
     assert_eq!(fs::read_to_string(&own_skill).unwrap(), "mine\n");
 

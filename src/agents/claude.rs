@@ -35,9 +35,6 @@ impl Agent for Claude {
         &["SessionStart", "SubagentStart"]
     }
 
-    /// @agent `--safe-mode` keeps hooks, plugins, MCP servers and CLAUDE.md out of the
-    /// review, so it judges against the standards alone and does not pay for their
-    /// context. `--add-dir` is what lets it read the skill files.
     fn review_command(&self, standards_dir: &Path, model: Option<&str>) -> Command {
         let mut command = Command::new(self.executable_name());
         command

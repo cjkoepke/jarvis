@@ -35,8 +35,6 @@ pub fn find_on_path(executable: &str) -> Option<PathBuf> {
         .find(|candidate| candidate.is_file())
 }
 
-/// @agent Compares relative paths and bytes. `ignored_file_name` is for the marker
-/// jarvis drops into each installed skill, which the source never contains.
 pub fn same_contents(left: &Path, right: &Path, ignored_file_name: Option<&str>) -> bool {
     let (Ok(left_files), Ok(right_files)) = (relative_files(left), relative_files(right)) else {
         return false;

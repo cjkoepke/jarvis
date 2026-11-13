@@ -101,3 +101,5 @@ and list it in `all()`.
 - No repo bootstrap or sync.
 - Codex delivery only works once the hooks are approved with `/hooks`. Until
   then Codex skips them and sessions start without the standards.
+- `status` cannot tell when Codex wants a changed hook approved again; it still
+  reports the hook as approved.

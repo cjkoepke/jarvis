@@ -7,14 +7,8 @@ use std::path::{Path, PathBuf};
 
 type Config = Map<String, Value>;
 
-/// @agent Codex shows this as the hook's title in `/hooks` ("Unnamed hook" without
-/// it) and Claude Code shows it while the hook runs. Codex's trust hash covers it,
-/// so changing the text makes Codex ask for approval again.
 const TITLE: &str = "jarvis: working standards";
 
-/// @agent New groups are appended, never inserted. Codex records hook trust by
-/// position (`hooks.json:<event>:<group>:<handler>` in `~/.codex/config.toml`), so
-/// shifting a person's existing hooks would silently revoke their trust.
 pub fn register(agent: &dyn Agent, env: &Env) -> Result<()> {
     let path = agent.hooks_file(env);
     let mut config = read(&path)?;
@@ -58,8 +52,6 @@ pub struct RegisteredHook {
     pub executable: PathBuf,
 }
 
-/// @agent The indices are positions inside the hooks file. Codex keys its trust
-/// records by them, which is why they are reported.
 pub fn registered(agent: &dyn Agent, env: &Env) -> Vec<RegisteredHook> {
     let config = read(&agent.hooks_file(env)).unwrap_or_default();
     let mut registered = Vec::new();

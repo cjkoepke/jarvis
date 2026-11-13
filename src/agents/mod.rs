@@ -28,9 +28,8 @@ pub trait Agent: Sync {
     fn skills_dir(&self, env: &Env) -> PathBuf;
     fn context_events(&self) -> &'static [&'static str];
 
-    /// @agent Must build a headless run that reads the review prompt on stdin, prints
-    /// only its reply on stdout, and cannot change files. `standards_dir` holds the
-    /// skill files the prompt points to, which sit outside the repository.
+    /// A headless run that cannot change files, reads the prompt on stdin and prints
+    /// only its reply. It must be able to read `standards_dir`.
     fn review_command(&self, standards_dir: &Path, model: Option<&str>) -> Command;
 
     fn approval(&self, _env: &Env) -> Approval {

@@ -38,8 +38,6 @@ pub struct Check {
     pub detail: String,
 }
 
-/// @agent `area` groups checks in the table (one per agent, plus Standards and
-/// Git), so every check of one area must be pushed consecutively.
 pub struct CheckSubject<'a> {
     pub area: &'a str,
     pub name: &'a str,

@@ -33,8 +33,6 @@ pub fn unregister(env: &Env) -> Result<()> {
     config(env, &["--remove-section", SECTION]).map(drop)
 }
 
-/// @agent Reads the global config file only. A repository can still switch the hook
-/// off in its own config, which this cannot see from outside that repository.
 pub fn registration(env: &Env) -> Registration {
     let executable = value(env, "command").and_then(|command| env.executable_in(&command, EVENT));
     let Some(executable) = executable else {
