@@ -31,7 +31,7 @@ fn main() -> ExitCode {
 
     let outcome = match cli.command {
         Cmd::Install(args) => commands::install::run(&env, &args),
-        Cmd::Uninstall { real } => commands::uninstall::run(&env, real),
+        Cmd::Uninstall => commands::uninstall::run(&env),
         Cmd::Doctor => commands::doctor::run(&env),
         Cmd::Hook { agent, event } => Ok(commands::hook::run(&env, &agent, &event)),
         Cmd::PrePush { git_args } => Ok(commands::pre_push::run(&env, &git_args)),

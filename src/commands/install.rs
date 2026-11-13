@@ -1,4 +1,3 @@
-use super::require_flag_for_real_home;
 use crate::agents::{self, hooks_file, skills, Agent};
 use crate::cli::InstallArgs;
 use crate::files::copy_dir;
@@ -11,7 +10,6 @@ use std::path::Path;
 use std::process::ExitCode;
 
 pub fn run(env: &Env, args: &InstallArgs) -> Result<ExitCode> {
-    require_flag_for_real_home(env, args.real)?;
     let agents = agents::chosen(&args.agents)?;
 
     let standards = replace_installed_standards(env, &args.standards)?;

@@ -7,7 +7,7 @@ AI agent session and sub-agent on the machine, and a review before every
 This is a proof of concept. `standards/core/core.md` is the real Constitution;
 the skill and the rules are samples marked `@TODO`.
 
-## Try it without touching your real setup
+## Try it in a throwaway home
 
 ```sh
 cargo build
@@ -18,9 +18,9 @@ target/debug/jarvis --home /tmp/jarvis-home hook claude SessionStart
 target/debug/jarvis --home /tmp/jarvis-home uninstall
 ```
 
-`install` and `uninstall` refuse your real home directory unless you pass
-`--real`. With `--real` (and no `--home`) they change `~/.claude/settings.json`,
-`~/.claude/skills`, `~/.codex/hooks.json`, `~/.agents/skills` and `~/.gitconfig`.
+Without `--home`, `install` and `uninstall` act on your real home directory:
+`~/.claude/settings.json`, `~/.claude/skills`, `~/.codex/hooks.json`,
+`~/.agents/skills` and `~/.gitconfig`.
 
 ## What it does
 

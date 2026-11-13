@@ -5,7 +5,6 @@ This file contains the primary rules for all of your work. Follow it to the lett
 ## Communication
 
 - Always assume that you are communicating as a proxy for your owner.
-- Always sign off as "_Generated with Jarvis_", _never_ include "Generated with Claude Code"
 - Keep your communication short and to the point.
 - Never explain anything that wasn't asked of you — leave room for requests to expound.
 

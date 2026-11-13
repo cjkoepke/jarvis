@@ -19,10 +19,7 @@ pub enum Cmd {
     #[command(about = "Copy the standards, register the agent hooks and the git pre-push review.")]
     Install(InstallArgs),
     #[command(about = "Remove everything `install` added and nothing else.")]
-    Uninstall {
-        #[arg(long, help = "Allow changing your real home directory.")]
-        real: bool,
-    },
+    Uninstall,
     #[command(about = "Check that the standards, agent hooks, skills and git review are in place.")]
     Doctor,
     #[command(hide = true)]
@@ -48,6 +45,4 @@ pub struct InstallArgs {
     pub standards: PathBuf,
     #[arg(long, value_delimiter = ',', help = "Agents to set up, comma-separated. Defaults to all of them.")]
     pub agents: Vec<String>,
-    #[arg(long, help = "Allow writing into your real home directory.")]
-    pub real: bool,
 }
