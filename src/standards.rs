@@ -1,4 +1,5 @@
 use crate::files::{has_extension, sorted_entries};
+use crate::prompts::Prompts;
 use crate::settings::Settings;
 use anyhow::{bail, Context, Result};
 use std::fs;
@@ -27,6 +28,7 @@ impl Skill {
 pub struct Standards {
     pub core: String,
     pub skills: Vec<Skill>,
+    pub prompts: Prompts,
     pub settings: Settings,
 }
 
@@ -35,30 +37,20 @@ impl Standards {
         Ok(Standards {
             core: load_core(&root.join("core"))?,
             skills: load_skills(&root.join("skills"))?,
+            prompts: Prompts::load(&root.join("prompts"))?,
             settings: Settings::load(&root.join("settings.toml"))?,
         })
     }
 
-    /// @agent The header is a statement of fact on purpose. Claude Code's hook docs
-    /// (https://code.claude.com/docs/en/hooks) warn that injected text phrased as
-    /// commands can be treated as a prompt injection.
     pub fn session_context(&self) -> String {
-        let mut context = format!("Working standards for this machine, delivered by jarvis.\n\n{}", self.core);
-        if !self.skills.is_empty() {
-            let skill_names: Vec<&str> = self.skills.iter().map(|skill| skill.name.as_str()).collect();
-            context.push_str(&format!(
-                "\n\nLonger procedures are installed as skills: {}.",
-                skill_names.join(", ")
-            ));
-        }
-        context
+        let skill_names: Vec<&str> = self.skills.iter().map(|skill| skill.name.as_str()).collect();
+        self.prompts
+            .session
+            .render(&[("core", &self.core), ("skills", &skill_names.join(", "))])
     }
 
     pub fn subagent_context(&self) -> String {
-        format!(
-            "Working standards for this machine, delivered by jarvis. They apply to delegated work as well.\n\n{}",
-            self.core
-        )
+        self.prompts.subagent.render(&[("core", &self.core)])
     }
 }
 

@@ -45,11 +45,37 @@ Without `--home`, `install` and `uninstall` act on your real home directory:
 | --- | --- |
 | `core/*.md` | Always in context. Capped at 6,000 characters. |
 | `skills/<name>/SKILL.md` | Loaded by the agent when a task needs it, and by the reviewer when it bears on a push. |
+| `prompts/*.md` | Every prompt jarvis sends to an agent. See [Prompts](#prompts). |
 | `settings.toml` | `[review]`: `agent` reviews pushes (`claude` or `codex`, default `claude`) on `model` (default: the agent's own). |
 
 After changing the standards, `jarvis status` reports the installed copy as out
 of date. A bare `jarvis install` refreshes it from any directory: it reuses the
 standards folder and agents of the last install.
+
+## Prompts
+
+A prompt is always a markdown file in `prompts/`. Code reads the file and
+replaces its `{{variable}}` placeholders, and never writes prompt text of its
+own. Each prompt can use only the variables listed for it; `install` refuses
+one that uses anything else. A new prompt gets its own file and its own row
+here.
+
+| File | Sent | Variables |
+| --- | --- | --- |
+| `review.md` | To the reviewer before each push. | `core`, `skills`, `commits`, `diff`, `pass`, `fail` |
+| `session.md` | At each session start. | `core`, `skills` |
+| `subagent.md` | At each sub-agent start. | `core` |
+
+| Variable | Holds |
+| --- | --- |
+| `core` | The core files, joined. |
+| `skills` | In `session.md`, the skill names. In `review.md`, each skill's name, description and file. |
+| `commits` | The messages of the commits the remote lacks. |
+| `diff` | Their diff. |
+| `pass`, `fail` | The verdict line the reviewer must end with. |
+
+Write the hook prompts as statements of fact. Claude Code can treat injected
+commands as a prompt injection ([hooks](https://code.claude.com/docs/en/hooks)).
 
 ## Source layout
 
@@ -60,9 +86,11 @@ standards folder and agents of the last install.
 | `src/agents/` | One file per agent, plus hook-file editing, skill copying and status checks. |
 | `src/check/` | The check type and its table and JSON output. |
 | `src/ui/` | The colour palette and styled messages every command prints through. |
-| `src/review/` | The review prompt, running the reviewer and reading its verdict. |
+| `src/review/` | The review prompt's variables, running the reviewer and reading its verdict. |
 | `src/git/` | Git hook registration and outgoing-commit inspection. |
-| `src/standards.rs` | Loading `core/` and `skills/`, and the context text. |
+| `src/standards.rs` | Loading the standards folder, and the hook context. |
+| `src/prompts.rs` | Loading prompt files and filling in their variables. |
+| `src/settings.rs` | Reading `settings.toml`. |
 
 To support another agent, add a file in `src/agents/` that implements `Agent`
 and list it in `all()`.
