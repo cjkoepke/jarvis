@@ -6,7 +6,6 @@ use crate::git::hook_config::{self, Registration, MINIMUM_GIT_VERSION};
 use crate::paths::Env;
 use crate::record::InstallRecord;
 use crate::review::reviewer;
-use crate::settings::ReviewSettings;
 use crate::standards::{Standards, CORE_MAX_CHARS};
 use crate::ui::{message, Tone};
 use anyhow::Result;
@@ -61,7 +60,7 @@ fn gather(env: &Env) -> Vec<Check> {
     checks.push(git_version_check());
     checks.push(git_review_check(env));
     if let Ok(standards) = &standards {
-        checks.push(git_reviewer_check(&standards.settings.review));
+        checks.push(git_reviewer_check(standards));
     }
     checks
 }
@@ -131,8 +130,8 @@ fn git_review_check(env: &Env) -> Check {
     }
 }
 
-fn git_reviewer_check(settings: &ReviewSettings) -> Check {
-    match reviewer::choose(settings) {
+fn git_reviewer_check(standards: &Standards) -> Check {
+    match reviewer::choose(standards) {
         Ok(reviewer) => GIT_REVIEWER.ok(reviewer.to_string()),
         Err(error) => GIT_REVIEWER.warn(format!("{error:#}, so pushes go out unreviewed")),
     }

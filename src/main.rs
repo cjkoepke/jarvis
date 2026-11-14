@@ -5,7 +5,6 @@ mod commands;
 mod files;
 mod git;
 mod paths;
-mod prompts;
 mod record;
 mod review;
 mod settings;

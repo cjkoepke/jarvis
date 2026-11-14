@@ -6,7 +6,12 @@ use std::process::{Command, Output};
 use tempfile::TempDir;
 
 const STANDARDS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/standards");
-const FAKE_REVIEWER: &str = "#!/bin/sh\ncat > \"$(dirname \"$0\")/prompt\"\ncat \"$(dirname \"$0\")/reply\"\n";
+const FAKE_REVIEWER: &str = r#"#!/bin/sh
+dir="$(dirname "$0")"
+cat > "$dir/prompt"
+git log --format=%H $JARVIS_PUSH_COMMITS --not --remotes="$JARVIS_PUSH_REMOTE" > "$dir/commits"
+cat "$dir/reply"
+"#;
 
 /// @agent This harness exists because no third-party crate gives a throwaway home
 /// directory together with a git whose global config lives in it. Every git call
@@ -45,6 +50,10 @@ impl Sandbox {
 
     fn prompt_given_to_reviewer(&self) -> String {
         fs::read_to_string(self.fake_reviewer_dir().join("prompt")).unwrap()
+    }
+
+    fn commits_the_reviewer_found(&self) -> String {
+        fs::read_to_string(self.fake_reviewer_dir().join("commits")).unwrap()
     }
 
     fn path_with_fake_reviewer_first(&self) -> std::ffi::OsString {
@@ -182,20 +191,22 @@ fn install_and_uninstall_leave_existing_configuration_alone() {
 }
 
 #[test]
-fn reviewer_is_given_the_standards_and_only_the_commits_the_remote_lacks() {
+fn reviewer_gets_the_core_the_review_skill_and_only_the_commits_the_remote_lacks() {
     let sandbox = Sandbox::new();
     sandbox.install();
     let repo = sandbox.repo_with_one_pushed_commit();
     let core = fs::read_to_string(Path::new(STANDARDS).join("core/core.md")).unwrap();
+    let review_skill = fs::read_to_string(Path::new(STANDARDS).join("skills/review/SKILL.md")).unwrap();
 
     sandbox.commit(&repo, "first.rs", "fn first_unpushed() {}\n");
+    let first = sandbox.head(&repo);
     sandbox.commit(&repo, "second.rs", "fn second_unpushed() {}\n");
+    let second = sandbox.head(&repo);
     assert!(sandbox.push(&repo).status.success());
 
     let prompt = sandbox.prompt_given_to_reviewer();
-    assert!(prompt.contains(core.trim()));
-    assert!(prompt.contains("fn first_unpushed() {}") && prompt.contains("fn second_unpushed() {}"));
-    assert!(!prompt.contains("+hello"));
+    assert!(prompt.contains(core.trim()) && prompt.contains(review_skill.trim()));
+    assert_eq!(sandbox.commits_the_reviewer_found(), format!("{second}\n{first}\n"));
 }
 
 #[test]

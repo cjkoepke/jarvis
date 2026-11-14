@@ -29,10 +29,11 @@ Without `--home`, `install` and `uninstall` act on your real home directory:
   `standards/core/`. Skills in `standards/skills/` are copied to where each
   agent looks for them. Codex needs its hooks approved once with `/hooks`.
 - **Review before push.** `install` adds a `pre-push` hook to the global git
-  config (Git 2.54 or newer). It hands the commits the remote lacks, their
-  diff, the whole core and the list of skills to the headless agent that
-  `settings.toml` names. The reviewer can read the working tree and the skill files and cannot change anything.
-  Violations refuse the push and are printed to the caller, so an agent that
+  config (Git 2.54 or newer). It runs the headless agent that `settings.toml`
+  names with the `review` skill, which finds the commits the remote lacks and
+  the skills that bear on them itself. Claude Code may only read files and run
+  `git log`, `git show`, `git diff` and `printenv`; Codex runs in its read-only
+  sandbox. Violations refuse the push and are printed to the caller, so an agent that
   ran `git push` reads them as the command's output, fixes them and pushes
   again. A review that cannot run never stops a push.
 - **Status.** `jarvis status` shows a table of checks on the standards, each
@@ -45,7 +46,7 @@ Without `--home`, `install` and `uninstall` act on your real home directory:
 | --- | --- |
 | `core/*.md` | Always in context. Capped at 6,000 characters. |
 | `skills/<name>/SKILL.md` | Loaded by the agent when a task needs it, and by the reviewer when it bears on a push. |
-| `prompts/*.md` | Every prompt jarvis sends to an agent. See [Prompts](#prompts). |
+| `skills/review/SKILL.md` | How to review commits. Any agent can use it, and the pre-push reviewer runs it. |
 | `settings.toml` | `[review]`: `agent` reviews pushes (`claude` or `codex`, default `claude`) on `model` (default: the agent's own). |
 
 After changing the standards, `jarvis status` reports the installed copy as out
@@ -54,25 +55,26 @@ standards folder and agents of the last install.
 
 ## Prompts
 
-A prompt is always a markdown file in `prompts/`. Code reads the file and
-replaces its `{{variable}}` placeholders, and never writes prompt text of its
-own. Each prompt can use only the variables listed for it; `install` refuses
-one that uses anything else. A new prompt gets its own file and its own row
-here.
+jarvis writes no prompt text of its own. Every agent gets the standards as they
+are written:
 
-| File | Sent | Variables |
-| --- | --- | --- |
-| `review.md` | To the reviewer before each push. | `core`, `skills`, `commits`, `diff`, `pass`, `fail` |
+- Session and sub-agent hooks send the core, with nothing around it.
+- The pre-push reviewer gets the core followed by the `review` skill, as a
+  session would after loading that skill. It gathers the commits, the diff and
+  the other skills itself, with the commands the skill shows.
+
+Anything a run needs that the standards cannot know reaches the agent as an
+environment variable, and the skill shows how to read it. These are the ones
+jarvis sets for the review:
 
 | Variable | Holds |
 | --- | --- |
-| `core` | The core files, joined. |
-| `skills` | Each skill's name, description and file. |
-| `commits` | The messages of the commits the remote lacks. |
-| `diff` | Their diff. |
-| `pass`, `fail` | The verdict line the reviewer must end with. |
+| `JARVIS_PUSH_REMOTE` | The remote being pushed to. |
+| `JARVIS_PUSH_COMMITS` | The tip of each pushed ref the remote lacks, separated by spaces. |
+| `JARVIS_STANDARDS` | The installed standards folder, holding `core/` and `skills/`. |
 
-Session and sub-agent hooks send the core as it is, with nothing around it.
+The review skill must ask for a last line of `VERDICT: PASS` or
+`VERDICT: FAIL`. jarvis reads only that line.
 
 ## Source layout
 
@@ -83,10 +85,9 @@ Session and sub-agent hooks send the core as it is, with nothing around it.
 | `src/agents/` | One file per agent, plus hook-file editing, skill copying and status checks. |
 | `src/check/` | The check type and its table and JSON output. |
 | `src/ui/` | The colour palette and styled messages every command prints through. |
-| `src/review/` | The review prompt's variables, running the reviewer and reading its verdict. |
-| `src/git/` | Git hook registration and outgoing-commit inspection. |
-| `src/standards.rs` | Loading the standards folder, and the hook context. |
-| `src/prompts.rs` | Loading prompt files and filling in their variables. |
+| `src/review/` | Running the reviewer and reading its verdict. |
+| `src/git/` | Git hook registration and finding the pushed commits the remote lacks. |
+| `src/standards.rs` | Loading the standards folder. |
 | `src/settings.rs` | Reading `settings.toml`. |
 
 To support another agent, add a file in `src/agents/` that implements `Agent`

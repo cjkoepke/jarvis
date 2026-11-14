@@ -1,5 +1,5 @@
-pub const PASS: &str = "VERDICT: PASS";
-pub const FAIL: &str = "VERDICT: FAIL";
+const PASS: &str = "VERDICT: PASS";
+const FAIL: &str = "VERDICT: FAIL";
 
 #[derive(Debug, PartialEq)]
 pub enum Verdict {

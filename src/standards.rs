@@ -1,5 +1,4 @@
 use crate::files::{has_extension, sorted_entries};
-use crate::prompts::Prompts;
 use crate::settings::Settings;
 use anyhow::{bail, Context, Result};
 use std::fs;
@@ -11,11 +10,9 @@ use std::path::{Path, PathBuf};
 pub const CORE_MAX_CHARS: usize = 6000;
 
 const SKILL_FILE: &str = "SKILL.md";
-const DESCRIPTION_FIELD: &str = "description:";
 
 pub struct Skill {
     pub name: String,
-    pub description: String,
     pub dir: PathBuf,
 }
 
@@ -28,7 +25,6 @@ impl Skill {
 pub struct Standards {
     pub core: String,
     pub skills: Vec<Skill>,
-    pub prompts: Prompts,
     pub settings: Settings,
 }
 
@@ -37,7 +33,6 @@ impl Standards {
         Ok(Standards {
             core: load_core(&root.join("core"))?,
             skills: load_skills(&root.join("skills"))?,
-            prompts: Prompts::load(&root.join("prompts"))?,
             settings: Settings::load(&root.join("settings.toml"))?,
         })
     }
@@ -71,14 +66,7 @@ fn load_skills(dir: &Path) -> Result<Vec<Skill>> {
     Ok(skill_dirs
         .map(|dir| Skill {
             name: dir.file_name().unwrap_or_default().to_string_lossy().into_owned(),
-            description: description(&dir.join(SKILL_FILE)),
             dir,
         })
         .collect())
-}
-
-fn description(skill_file: &Path) -> String {
-    let text = fs::read_to_string(skill_file).unwrap_or_default();
-    let field = text.lines().find_map(|line| line.strip_prefix(DESCRIPTION_FIELD));
-    field.unwrap_or_default().trim().to_string()
 }

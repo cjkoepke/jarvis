@@ -3,7 +3,13 @@ use crate::paths::Env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const READ_ONLY_TOOLS: &str = "Read,Grep,Glob";
+const REVIEW_TOOLS: &str = "Read,Grep,Glob,Bash";
+const REVIEW_COMMANDS: [&str; 4] = [
+    "Bash(git log *)",
+    "Bash(git show *)",
+    "Bash(git diff *)",
+    "Bash(printenv *)",
+];
 
 /// @agent `SubagentStart` is registered as well as `SessionStart` because Claude
 /// Code's built-in Explore and Plan sub-agents skip CLAUDE.md, so a hook is the only
@@ -38,7 +44,8 @@ impl Agent for Claude {
     fn review_command(&self, standards_dir: &Path, model: Option<&str>) -> Command {
         let mut command = Command::new(self.executable_name());
         command
-            .args(["--print", "--tools", READ_ONLY_TOOLS])
+            .args(["--print", "--tools", REVIEW_TOOLS, "--allowedTools"])
+            .args(REVIEW_COMMANDS)
             .args(["--safe-mode", "--no-session-persistence", "--permission-prompts", "none"])
             .arg("--add-dir")
             .arg(standards_dir);
