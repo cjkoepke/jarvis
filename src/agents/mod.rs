@@ -1,17 +1,25 @@
 pub mod checks;
 mod claude;
 mod codex;
+mod codex_trust;
 pub mod hooks_file;
 pub mod skills;
 
 use crate::paths::Env;
 use anyhow::{Context, Result};
 use serde_json::json;
-use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+pub enum Approval {
+    NotRequired,
+    Granted,
+    Pending { next_step: &'static str },
+}
 
 /// @agent To support another agent, add one file implementing this trait and list
-/// it in `all()`. Hook registration, skills and doctor checks need no changes.
+/// it in `all()`. Hook registration, skills, status checks and the review need no
+/// changes.
 pub trait Agent: Sync {
     fn id(&self) -> &'static str;
     fn display_name(&self) -> &'static str;
@@ -20,8 +28,12 @@ pub trait Agent: Sync {
     fn skills_dir(&self, env: &Env) -> PathBuf;
     fn context_events(&self) -> &'static [&'static str];
 
-    fn manual_step_after_install(&self) -> Option<&'static str> {
-        None
+    /// A headless run that cannot change files, reads the prompt on stdin and prints
+    /// only its reply. It must be able to read `standards_dir`.
+    fn review_command(&self, standards_dir: &Path, model: Option<&str>) -> Command;
+
+    fn approval(&self, _env: &Env) -> Approval {
+        Approval::NotRequired
     }
 
     fn hook_reply(&self, event: &str, context: &str) -> String {
@@ -47,16 +59,10 @@ pub fn chosen(ids: &[String]) -> Result<Vec<&'static dyn Agent>> {
         .collect()
 }
 
-pub fn record_installed(env: &Env, agents: &[&dyn Agent]) -> Result<()> {
-    let ids: Vec<&str> = agents.iter().map(|agent| agent.id()).collect();
-    fs::write(env.installed_agents_file(), ids.join("\n") + "\n").context("recording the installed agents")
-}
-
-pub fn installed(env: &Env) -> Vec<&'static dyn Agent> {
-    let ids = fs::read_to_string(env.installed_agents_file()).unwrap_or_default();
-    ids.lines().filter_map(by_id).collect()
+pub fn hook_subcommand(agent: &dyn Agent, event: &str) -> String {
+    format!("hook {} {event}", agent.id())
 }
 
 pub fn hook_command(agent: &dyn Agent, env: &Env, event: &str) -> String {
-    env.shell_command(&format!("hook {} {event}", agent.id()))
+    env.shell_command(&hook_subcommand(agent, event))
 }

@@ -1,10 +1,11 @@
-use super::Agent;
+use super::{codex_trust, Agent, Approval};
 use crate::paths::Env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 /// @agent Codex reads `~/.codex/hooks.json` in the same shape Claude Code uses, but
 /// ignores a hook from that file until the person approves it once
-/// (https://learn.chatgpt.com/docs/hooks). jarvis cannot grant or detect that approval.
+/// (https://learn.chatgpt.com/docs/hooks). jarvis cannot grant that approval, only read it.
 pub struct Codex;
 
 impl Agent for Codex {
@@ -32,7 +33,17 @@ impl Agent for Codex {
         &["SessionStart", "SubagentStart"]
     }
 
-    fn manual_step_after_install(&self) -> Option<&'static str> {
-        Some("open Codex, run /hooks and approve the jarvis hooks once; Codex ignores them until then")
+    fn approval(&self, env: &Env) -> Approval {
+        codex_trust::approval(self, env)
+    }
+
+    fn review_command(&self, _standards_dir: &Path, model: Option<&str>) -> Command {
+        let mut command = Command::new(self.executable_name());
+        command.args(["exec", "--skip-git-repo-check", "--sandbox", "read-only", "--ephemeral"]);
+        if let Some(model) = model {
+            command.args(["--model", model]);
+        }
+        command.arg("-");
+        command
     }
 }

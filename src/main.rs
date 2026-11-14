@@ -5,13 +5,17 @@ mod commands;
 mod files;
 mod git;
 mod paths;
-mod rules;
+mod record;
+mod review;
+mod settings;
 mod standards;
+mod ui;
 
 use clap::Parser;
 use cli::{Cli, Cmd};
 use paths::Env;
 use std::process::ExitCode;
+use ui::message;
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
@@ -20,7 +24,7 @@ fn main() -> ExitCode {
     let env = match Env::new(cli.home) {
         Ok(env) => env,
         Err(error) => {
-            eprintln!("jarvis: {error:#}");
+            message::error(&format!("{error:#}"));
             return if runs_inside_agent_or_git {
                 ExitCode::SUCCESS
             } else {
@@ -32,12 +36,12 @@ fn main() -> ExitCode {
     let outcome = match cli.command {
         Cmd::Install(args) => commands::install::run(&env, &args),
         Cmd::Uninstall => commands::uninstall::run(&env),
-        Cmd::Doctor => commands::doctor::run(&env),
+        Cmd::Status { format } => commands::status::run(&env, format),
         Cmd::Hook { agent, event } => Ok(commands::hook::run(&env, &agent, &event)),
         Cmd::PrePush { git_args } => Ok(commands::pre_push::run(&env, &git_args)),
     };
     outcome.unwrap_or_else(|error| {
-        eprintln!("jarvis: {error:#}");
+        message::error(&format!("{error:#}"));
         ExitCode::FAILURE
     })
 }

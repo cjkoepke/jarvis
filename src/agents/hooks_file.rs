@@ -1,11 +1,13 @@
-use super::{hook_command, Agent};
+use super::{hook_command, hook_subcommand, Agent};
 use crate::paths::Env;
 use anyhow::{bail, Context, Result};
 use serde_json::{json, Map, Value};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 type Config = Map<String, Value>;
+
+const TITLE: &str = "jarvis: working standards";
 
 pub fn register(agent: &dyn Agent, env: &Env) -> Result<()> {
     let path = agent.hooks_file(env);
@@ -21,7 +23,8 @@ pub fn register(agent: &dyn Agent, env: &Env) -> Result<()> {
         let groups = groups
             .as_array_mut()
             .with_context(|| format!("`hooks.{event}` in {} is not a list", path.display()))?;
-        groups.push(json!({ "hooks": [{ "type": "command", "command": hook_command(agent, env, event) }] }));
+        let handler = json!({ "type": "command", "command": hook_command(agent, env, event), "statusMessage": TITLE });
+        groups.push(json!({ "hooks": [handler] }));
     }
     write(&path, &config)
 }
@@ -42,25 +45,35 @@ pub fn unregister(agent: &dyn Agent, env: &Env) -> Result<()> {
     }
 }
 
-pub fn unregistered_events(agent: &dyn Agent, env: &Env) -> Vec<&'static str> {
-    let config = read(&agent.hooks_file(env)).unwrap_or_default();
-    let is_registered = |event: &str| commands_for(&config, event).any(|command| command == hook_command(agent, env, event));
-    agent
-        .context_events()
-        .iter()
-        .copied()
-        .filter(|event| !is_registered(event))
-        .collect()
+pub struct RegisteredHook {
+    pub event: &'static str,
+    pub group_index: usize,
+    pub handler_index: usize,
+    pub executable: PathBuf,
 }
 
-fn commands_for<'a>(config: &'a Config, event: &str) -> impl Iterator<Item = &'a str> {
-    let groups = config.get("hooks").and_then(|hooks| hooks.get(event)).and_then(Value::as_array);
-    let handlers = groups
-        .into_iter()
-        .flatten()
-        .filter_map(|group| group.get("hooks").and_then(Value::as_array))
-        .flatten();
-    handlers.filter_map(command_of)
+pub fn registered(agent: &dyn Agent, env: &Env) -> Vec<RegisteredHook> {
+    let config = read(&agent.hooks_file(env)).unwrap_or_default();
+    let mut registered = Vec::new();
+    for event in agent.context_events().iter().copied() {
+        let subcommand = hook_subcommand(agent, event);
+        let groups = config.get("hooks").and_then(|hooks| hooks.get(event)).and_then(Value::as_array);
+        for (group_index, group) in groups.into_iter().flatten().enumerate() {
+            let handlers = group.get("hooks").and_then(Value::as_array);
+            for (handler_index, handler) in handlers.into_iter().flatten().enumerate() {
+                let executable = command_of(handler).and_then(|command| env.executable_in(command, &subcommand));
+                if let Some(executable) = executable {
+                    registered.push(RegisteredHook {
+                        event,
+                        group_index,
+                        handler_index,
+                        executable,
+                    });
+                }
+            }
+        }
+    }
+    registered
 }
 
 fn command_of(handler: &Value) -> Option<&str> {

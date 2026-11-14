@@ -1,10 +1,17 @@
 use serde_json::Value;
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use tempfile::TempDir;
 
 const STANDARDS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/standards");
+const FAKE_REVIEWER: &str = r#"#!/bin/sh
+dir="$(dirname "$0")"
+cat > "$dir/prompt"
+git log --format=%H $JARVIS_PUSH_COMMITS --not --remotes="$JARVIS_PUSH_REMOTE" > "$dir/commits"
+cat "$dir/reply"
+"#;
 
 /// @agent This harness exists because no third-party crate gives a throwaway home
 /// directory together with a git whose global config lives in it. Every git call
@@ -19,7 +26,40 @@ impl Sandbox {
         let dir = TempDir::new().unwrap();
         let home = dir.path().canonicalize().unwrap().join("home");
         fs::create_dir_all(&home).unwrap();
-        Sandbox { _dir: dir, home }
+        let sandbox = Sandbox { _dir: dir, home };
+        sandbox.install_fake_reviewer();
+        sandbox
+    }
+
+    fn fake_reviewer_dir(&self) -> PathBuf {
+        self.home.join("reviewer")
+    }
+
+    fn install_fake_reviewer(&self) {
+        let dir = self.fake_reviewer_dir();
+        let executable = dir.join("claude");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(&executable, FAKE_REVIEWER).unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
+        self.reviewer_replies("VERDICT: PASS");
+    }
+
+    fn reviewer_replies(&self, reply: &str) {
+        fs::write(self.fake_reviewer_dir().join("reply"), reply).unwrap();
+    }
+
+    fn prompt_given_to_reviewer(&self) -> String {
+        fs::read_to_string(self.fake_reviewer_dir().join("prompt")).unwrap()
+    }
+
+    fn commits_the_reviewer_found(&self) -> String {
+        fs::read_to_string(self.fake_reviewer_dir().join("commits")).unwrap()
+    }
+
+    fn path_with_fake_reviewer_first(&self) -> std::ffi::OsString {
+        let inherited = std::env::var_os("PATH").unwrap_or_default();
+        let dirs = std::iter::once(self.fake_reviewer_dir()).chain(std::env::split_paths(&inherited));
+        std::env::join_paths(dirs).unwrap()
     }
 
     fn jarvis(&self, args: &[&str]) -> Output {
@@ -40,6 +80,7 @@ impl Sandbox {
             .current_dir(cwd)
             .args(args)
             .env("HOME", &self.home)
+            .env("PATH", self.path_with_fake_reviewer_first())
             .env("GIT_CONFIG_NOSYSTEM", "1")
             .env_remove("XDG_CONFIG_HOME")
             .env_remove("GIT_CONFIG_GLOBAL")
@@ -129,8 +170,13 @@ fn install_and_uninstall_leave_existing_configuration_alone() {
     sandbox.install();
     let installed = read_json(&settings);
     assert_eq!(installed["hooks"]["SessionStart"].as_array().unwrap().len(), 2);
+    assert_eq!(installed["hooks"]["SessionStart"][0]["hooks"][0]["command"], "echo mine");
     assert_eq!(installed["hooks"]["SubagentStart"].as_array().unwrap().len(), 1);
     assert_eq!(fs::read_to_string(&own_skill).unwrap(), "mine\n");
+
+    assert!(sandbox.jarvis(&["install", "--agents", "claude"]).status.success());
+    assert!(!sandbox.home.join(".codex/hooks.json").exists());
+    assert!(!sandbox.home.join(".agents/skills/commenting").exists());
 
     assert!(sandbox.jarvis(&["uninstall"]).status.success());
     assert_eq!(read_json(&settings), serde_json::from_str::<Value>(settings_before).unwrap());
@@ -145,35 +191,42 @@ fn install_and_uninstall_leave_existing_configuration_alone() {
 }
 
 #[test]
-fn fixable_push_is_stopped_fixed_in_a_new_commit_and_sent_by_the_next_push() {
+fn reviewer_gets_the_core_the_review_skill_and_only_the_commits_the_remote_lacks() {
     let sandbox = Sandbox::new();
     sandbox.install();
     let repo = sandbox.repo_with_one_pushed_commit();
-    sandbox.commit(&repo, "lib.rs", "fn main() {}  \nfn other() {}");
-    let pushed_commit = sandbox.head(&repo);
+    let core = fs::read_to_string(Path::new(STANDARDS).join("core/core.md")).unwrap();
+    let review_skill = fs::read_to_string(Path::new(STANDARDS).join("skills/review/SKILL.md")).unwrap();
 
-    assert!(!sandbox.push(&repo).status.success());
-    assert_eq!(sandbox.git_output(&repo, &["rev-parse", "HEAD^"]), pushed_commit);
-    assert_eq!(fs::read_to_string(repo.join("lib.rs")).unwrap(), "fn main() {}\nfn other() {}\n");
-    assert_eq!(sandbox.git_output(&repo, &["status", "--porcelain"]), "");
-
+    sandbox.commit(&repo, "first.rs", "fn first_unpushed() {}\n");
+    let first = sandbox.head(&repo);
+    sandbox.commit(&repo, "second.rs", "fn second_unpushed() {}\n");
+    let second = sandbox.head(&repo);
     assert!(sandbox.push(&repo).status.success());
-    assert_eq!(sandbox.remote_head(&repo), sandbox.head(&repo));
+
+    let prompt = sandbox.prompt_given_to_reviewer();
+    assert!(prompt.contains(core.trim()) && prompt.contains(review_skill.trim()));
+    assert_eq!(sandbox.commits_the_reviewer_found(), format!("{second}\n{first}\n"));
 }
 
 #[test]
-fn blocked_file_stops_the_push_and_a_reported_one_does_not() {
+fn reviewer_decides_the_push_and_a_broken_reviewer_never_stops_one() {
     let sandbox = Sandbox::new();
     sandbox.install();
     let repo = sandbox.repo_with_one_pushed_commit();
-
-    sandbox.commit(&repo, "app.js", "console.log('here');\n");
-    assert!(sandbox.push(&repo).status.success());
     let last_pushed = sandbox.head(&repo);
 
-    sandbox.commit(&repo, ".env", "TOKEN=abc\n");
-    let blocked_commit = sandbox.head(&repo);
+    sandbox.commit(&repo, "lib.rs", "fn main() {}\n");
+    sandbox.reviewer_replies("lib.rs:1 breaks a standard\nVERDICT: FAIL");
     assert!(!sandbox.push(&repo).status.success());
-    assert_eq!(sandbox.head(&repo), blocked_commit);
     assert_eq!(sandbox.remote_head(&repo), last_pushed);
+
+    sandbox.reviewer_replies("VERDICT: PASS");
+    assert!(sandbox.push(&repo).status.success());
+    assert_eq!(sandbox.remote_head(&repo), sandbox.head(&repo));
+
+    sandbox.commit(&repo, "more.rs", "fn more() {}\n");
+    sandbox.reviewer_replies("I could not finish the review.");
+    assert!(sandbox.push(&repo).status.success());
+    assert_eq!(sandbox.remote_head(&repo), sandbox.head(&repo));
 }

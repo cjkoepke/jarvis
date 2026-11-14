@@ -1,11 +1,12 @@
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(
     name = "jarvis",
     version,
-    about = "Puts your working standards into every agent session and reviews changes before push."
+    about = "Puts your working standards into every agent session and reviews changes before push.",
+    styles = crate::ui::style::help_styles()
 )]
 pub struct Cli {
     #[arg(long, global = true, help = "Home directory to install into and read from. Defaults to $HOME.")]
@@ -20,8 +21,11 @@ pub enum Cmd {
     Install(InstallArgs),
     #[command(about = "Remove everything `install` added and nothing else.")]
     Uninstall,
-    #[command(about = "Check that the standards, agent hooks, skills and git review are in place.")]
-    Doctor,
+    #[command(about = "Show whether the standards, agent hooks, skills and git review are in place.")]
+    Status {
+        #[arg(long, value_enum, default_value_t = Format::Table, help = "`table` for a person, `json` for an agent.")]
+        format: Format,
+    },
     #[command(hide = true)]
     Hook { agent: String, event: String },
     #[command(hide = true, name = "pre-push")]
@@ -39,10 +43,23 @@ impl Cmd {
     }
 }
 
+#[derive(Clone, Copy, ValueEnum)]
+pub enum Format {
+    Table,
+    Json,
+}
+
 #[derive(Args)]
 pub struct InstallArgs {
-    #[arg(long, default_value = "standards", help = "Folder holding core/, skills/ and rules/.")]
-    pub standards: PathBuf,
-    #[arg(long, value_delimiter = ',', help = "Agents to set up, comma-separated. Defaults to all of them.")]
+    #[arg(
+        long,
+        help = "Folder holding core/ and skills/. Defaults to the last install's folder, then ./standards."
+    )]
+    pub standards: Option<PathBuf>,
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help = "Agents to set up, comma-separated. Defaults to the last install's agents, then all of them."
+    )]
     pub agents: Vec<String>,
 }

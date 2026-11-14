@@ -1,7 +1,7 @@
 use super::Agent;
-use crate::files::{copy_dir, sorted_entries};
+use crate::files::{copy_dir, same_contents, sorted_entries};
 use crate::paths::Env;
-use crate::standards::Standards;
+use crate::standards::{Skill, Standards};
 use anyhow::Result;
 use std::fs;
 use std::path::Path;
@@ -51,6 +51,20 @@ pub fn not_installed<'a>(agent: &dyn Agent, env: &Env, standards: &'a Standards)
     let skills_dir = agent.skills_dir(env);
     let skill_names = standards.skills.iter().map(|skill| skill.name.as_str());
     skill_names.filter(|name| !is_installed_by_jarvis(&skills_dir.join(name))).collect()
+}
+
+pub fn out_of_date<'a>(agent: &dyn Agent, env: &Env, standards: &'a Standards) -> Vec<&'a str> {
+    let skills_dir = agent.skills_dir(env);
+    let differs_from_standards = |skill: &&Skill| {
+        let installed = skills_dir.join(&skill.name);
+        is_installed_by_jarvis(&installed) && !same_contents(&skill.dir, &installed, Some(INSTALLED_BY_JARVIS))
+    };
+    standards
+        .skills
+        .iter()
+        .filter(differs_from_standards)
+        .map(|skill| skill.name.as_str())
+        .collect()
 }
 
 fn is_installed_by_jarvis(skill_dir: &Path) -> bool {
