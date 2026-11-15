@@ -25,18 +25,19 @@ pub struct Screen {
 
 impl Screen {
     pub fn open() -> Result<Screen> {
-        let mut out = io::stdout();
+        let out = io::stdout();
         if !io::stdin().is_terminal() || !out.is_terminal() {
             bail!("this is not an interactive terminal");
         }
         let colored = AutoStream::choice(&out) != ColorChoice::Never;
         terminal::enable_raw_mode()?;
-        queue!(out, cursor::Hide, terminal::DisableLineWrap)?;
-        Ok(Screen {
+        let mut screen = Screen {
             out,
             lines_drawn: 0,
             colored,
-        })
+        };
+        queue!(screen.out, cursor::Hide, terminal::DisableLineWrap)?;
+        Ok(screen)
     }
 
     pub fn draw(&mut self, lines: &[String]) -> Result<()> {
