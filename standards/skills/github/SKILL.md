@@ -1,6 +1,7 @@
 ---
-
-## name: github description: Rules for interacting with GitHub, including reviews, pull requests, commit styles, etc.
+name: github
+description: Rules for interacting with GitHub, including reviews, pull requests, commit styles, etc.
+---
 
 ## Communication Style
 

@@ -1,6 +1,7 @@
 ---
-
-## name: coding description: use whenever you begin to write any sort of code
+name: coding
+description: use whenever you begin to write any sort of code
+---
 
 ## Methodology
 
