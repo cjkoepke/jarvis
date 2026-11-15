@@ -1,6 +1,7 @@
 ---
-
-## name: Workflows & Subagents description: use this when you need to start a workflow, deploy a subagent, or orchestrate a combination of the two
+name: orchestration
+description: use this when you need to start a workflow, deploy a subagent, or orchestrate a combination of the two
+---
 
 - _Always_ safeguard the owner's token limits. If you don't know them, assume a conservative approach.
 - _Always_ ensure subagents receive this Constitution.
