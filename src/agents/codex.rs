@@ -3,9 +3,6 @@ use crate::paths::Env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// @agent Codex reads `~/.codex/hooks.json` in the same shape Claude Code uses, but
-/// ignores a hook from that file until the person approves it once
-/// (https://learn.chatgpt.com/docs/hooks). jarvis cannot grant that approval, only read it.
 pub struct Codex;
 
 impl Agent for Codex {

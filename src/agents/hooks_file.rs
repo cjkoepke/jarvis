@@ -80,8 +80,6 @@ fn command_of(handler: &Value) -> Option<&str> {
     handler.get("command").and_then(Value::as_str)
 }
 
-/// @agent Matches loosely instead of on the exact command, so hooks written by a
-/// jarvis binary at an older path are still found and replaced.
 fn is_jarvis_hook(agent: &dyn Agent, handler: &Value) -> bool {
     command_of(handler).is_some_and(|command| command.contains("jarvis") && command.contains(&format!(" hook {} ", agent.id())))
 }
@@ -116,8 +114,6 @@ fn remove_jarvis_hooks(agent: &dyn Agent, config: &mut Config) -> bool {
     removed_any
 }
 
-/// @agent Anything that is not a JSON object is an error on purpose: jarvis must
-/// never overwrite agent configuration it could not read.
 fn read(path: &Path) -> Result<Config> {
     if !path.exists() {
         return Ok(Config::new());

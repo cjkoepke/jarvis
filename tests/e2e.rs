@@ -13,9 +13,6 @@ git log --format=%H $JARVIS_PUSH_COMMITS --not --remotes="$JARVIS_PUSH_REMOTE" >
 cat "$dir/reply"
 "#;
 
-/// @agent This harness exists because no third-party crate gives a throwaway home
-/// directory together with a git whose global config lives in it. Every git call
-/// must go through `git()` so the real user and system config are never read.
 struct Sandbox {
     _dir: TempDir,
     home: PathBuf,

@@ -11,9 +11,6 @@ const REVIEW_COMMANDS: [&str; 4] = [
     "Bash(printenv *)",
 ];
 
-/// @agent `SubagentStart` is registered as well as `SessionStart` because Claude
-/// Code's built-in Explore and Plan sub-agents skip CLAUDE.md, so a hook is the only
-/// way the standards reach them (https://code.claude.com/docs/en/sub-agents).
 pub struct Claude;
 
 impl Agent for Claude {

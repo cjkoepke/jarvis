@@ -6,8 +6,6 @@ use anyhow::Result;
 use std::fs;
 use std::path::Path;
 
-/// @agent Only skill folders carrying this file are ever replaced or removed. That
-/// is what keeps a person's own skill with the same name safe.
 const INSTALLED_BY_JARVIS: &str = ".jarvis";
 
 /// Returns one message per skill that was skipped.

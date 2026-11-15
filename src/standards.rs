@@ -4,9 +4,6 @@ use anyhow::{bail, Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// @agent Claude Code drops hook context longer than 10,000 characters
-/// (https://code.claude.com/docs/en/hooks). The cap sits well below that because a
-/// core this long stops being followed.
 pub const CORE_MAX_CHARS: usize = 6000;
 
 const SKILL_FILE: &str = "SKILL.md";

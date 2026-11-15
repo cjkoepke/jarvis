@@ -66,8 +66,6 @@ fn agent_ids<'a>(args: &'a InstallArgs, previous: Option<&'a InstallRecord>) -> 
     }
 }
 
-/// @agent The source is loaded before anything is copied, so a broken standards
-/// folder can never replace a working install.
 fn replace_installed_standards(env: &Env, source: &Path) -> Result<Standards> {
     Standards::load(source).with_context(|| format!("the standards in {} are not usable", source.display()))?;
 

@@ -17,9 +17,6 @@ pub enum Approval {
     Pending { next_step: &'static str },
 }
 
-/// @agent To support another agent, add one file implementing this trait and list
-/// it in `all()`. Hook registration, skills, status checks and the review need no
-/// changes.
 pub trait Agent: Sync {
     fn id(&self) -> &'static str;
     fn display_name(&self) -> &'static str;

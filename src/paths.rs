@@ -1,8 +1,6 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
-/// @agent Everything jarvis reads or writes hangs off `home`, so `--home` can point
-/// a whole install at a throwaway directory. Never resolve a path from `$HOME` directly.
 #[derive(Debug, Clone)]
 pub struct Env {
     pub home: PathBuf,

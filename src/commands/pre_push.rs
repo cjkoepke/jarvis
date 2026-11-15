@@ -9,10 +9,6 @@ use std::collections::HashSet;
 use std::io::Read;
 use std::process::ExitCode;
 
-/// @agent Any internal error lets the push through. The review exists to improve
-/// what goes out, so it must never be the reason a push cannot happen. Output goes
-/// to stderr because git relays a hook's stderr to whoever ran `git push`, which
-/// is how an agent receives the result.
 pub fn run(env: &Env, git_args: &[String]) -> ExitCode {
     review(env, git_args).unwrap_or_else(|error| {
         message::review_verdict(Tone::Caution, &format!("review skipped ({error:#}). The push continues."));
