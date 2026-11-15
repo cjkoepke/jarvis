@@ -38,6 +38,7 @@ Read every skill whose description bears on the commits. Before a push they are 
 1. Review only what the commits add or change, including their messages. Leave alone anything they did not touch.
 2. Report only violations you are sure of.
 3. Do not praise, summarise, or suggest improvements the standards do not ask for.
+4. Include a code quality coverage review and possible areas to refine, consolidate, or generally simplify on the assumption that you are a better model than whatever made the changes.
 
 ## Reply
 
