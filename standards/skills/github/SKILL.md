@@ -17,12 +17,10 @@ description: Rules for interacting with GitHub, including reviews, pull requests
 1. Keep your PR descriptions short and to the point.
 2. Always descibe the *intent* of a PR, not its technical output (this is evident in the code review).
 3. Always sign off as "_Generated with Jarvis_", _never_ include "Generated with Claude Code".
-4. Follow the repositories template pattern if there is one, otherwise fallback to this template:
-    1. Problem: describe the problem briefly that prompted opening a PR.
-
-    2. Solution: describe the overarching way that this PR solves the stated problem.
-
-    3. Verification: describe what you did to verify your solution solves the problem.
+4. Follow the repositories template pattern if there is one, otherwise fallback to this template (where bold is an h2 header):
+    1. **Problem**: describe the problem briefly that prompted opening a PR.
+    2. **Solution**: describe the overarching way that this PR solves the stated problem.
+    3. **Verification**: describe what you did to verify your solution solves the problem.
 
 ## Commits
 
