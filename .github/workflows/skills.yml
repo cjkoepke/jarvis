@@ -1,0 +1,25 @@
+name: skills
+
+on:
+  pull_request:
+    paths:
+      - "standards/skills/**"
+      - ".github/workflows/skills.yml"
+
+env:
+  SKILLS_REF: git+https://github.com/agentskills/agentskills@83021e2be457a9b6679148719c1f6074f0ad975e#subdirectory=skills-ref
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.3.3
+      - run: uv tool install "$SKILLS_REF"
+      - name: Validate every skill against the Agent Skills spec
+        run: |
+          status=0
+          for skill in standards/skills/*/; do
+            skills-ref validate "$skill" || status=1
+          done
+          exit "$status"
