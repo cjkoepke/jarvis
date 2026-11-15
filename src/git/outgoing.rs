@@ -3,19 +3,20 @@ use anyhow::Result;
 
 pub struct PushedRef {
     pub local_sha: String,
+    pub remote_ref: String,
+    pub remote_sha: String,
 }
 
 impl PushedRef {
-    /// @agent Git gives a pre-push hook one line per ref on stdin:
-    /// `<local ref> <local sha> <remote ref> <remote sha>`. An all-zero sha means
-    /// "no commit": a deleted ref locally, a new ref on the remote.
     pub fn parse(stdin_line: &str) -> Option<PushedRef> {
         let fields: Vec<&str> = stdin_line.split_whitespace().collect();
-        let [_local_ref, local_sha, _remote_ref, _remote_sha] = fields[..] else {
+        let [_local_ref, local_sha, remote_ref, remote_sha] = fields[..] else {
             return None;
         };
         Some(PushedRef {
             local_sha: local_sha.to_string(),
+            remote_ref: remote_ref.to_string(),
+            remote_sha: remote_sha.to_string(),
         })
     }
 

@@ -13,9 +13,6 @@ git log --format=%H $JARVIS_PUSH_COMMITS --not --remotes="$JARVIS_PUSH_REMOTE" >
 cat "$dir/reply"
 "#;
 
-/// @agent This harness exists because no third-party crate gives a throwaway home
-/// directory together with a git whose global config lives in it. Every git call
-/// must go through `git()` so the real user and system config are never read.
 struct Sandbox {
     _dir: TempDir,
     home: PathBuf,
@@ -210,17 +207,32 @@ fn reviewer_gets_the_core_the_review_skill_and_only_the_commits_the_remote_lacks
 }
 
 #[test]
+fn settings_in_the_jarvis_folder_choose_the_reviewer_and_outlast_an_install() {
+    let sandbox = Sandbox::new();
+    sandbox.install();
+    let repo = sandbox.repo_with_one_pushed_commit();
+    let settings = sandbox.home.join(".jarvis/settings.toml");
+    let codex = sandbox.fake_reviewer_dir().join("codex");
+    let codex_ran = sandbox.fake_reviewer_dir().join("codex-ran");
+    fs::write(&codex, "#!/bin/sh\ntouch \"$(dirname \"$0\")/codex-ran\"\necho 'VERDICT: PASS'\n").unwrap();
+    fs::set_permissions(&codex, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(&settings, "[review]\nagent = \"codex\"\n").unwrap();
+
+    sandbox.install();
+    sandbox.commit(&repo, "lib.rs", "fn main() {}\n");
+    assert!(sandbox.push(&repo).status.success());
+
+    assert!(codex_ran.exists());
+    assert_eq!(fs::read_to_string(&settings).unwrap(), "[review]\nagent = \"codex\"\n");
+}
+
+#[test]
 fn reviewer_decides_the_push_and_a_broken_reviewer_never_stops_one() {
     let sandbox = Sandbox::new();
     sandbox.install();
     let repo = sandbox.repo_with_one_pushed_commit();
-    let last_pushed = sandbox.head(&repo);
 
     sandbox.commit(&repo, "lib.rs", "fn main() {}\n");
-    sandbox.reviewer_replies("lib.rs:1 breaks a standard\nVERDICT: FAIL");
-    assert!(!sandbox.push(&repo).status.success());
-    assert_eq!(sandbox.remote_head(&repo), last_pushed);
-
     sandbox.reviewer_replies("VERDICT: PASS");
     assert!(sandbox.push(&repo).status.success());
     assert_eq!(sandbox.remote_head(&repo), sandbox.head(&repo));
@@ -229,4 +241,53 @@ fn reviewer_decides_the_push_and_a_broken_reviewer_never_stops_one() {
     sandbox.reviewer_replies("I could not finish the review.");
     assert!(sandbox.push(&repo).status.success());
     assert_eq!(sandbox.remote_head(&repo), sandbox.head(&repo));
+    let last_pushed = sandbox.head(&repo);
+
+    sandbox.commit(&repo, "bad.rs", "fn bad() {}\n");
+    sandbox.reviewer_replies("bad.rs:1 breaks a standard\nVERDICT: FAIL");
+    assert!(!sandbox.push(&repo).status.success());
+    assert_eq!(sandbox.remote_head(&repo), last_pushed);
+}
+
+#[test]
+fn a_refused_push_goes_out_unreviewed_on_the_next_attempt_and_the_review_returns_after_it() {
+    let sandbox = Sandbox::new();
+    sandbox.install();
+    let repo = sandbox.repo_with_one_pushed_commit();
+    let prompt = sandbox.fake_reviewer_dir().join("prompt");
+    sandbox.reviewer_replies("lib.rs:1 breaks a standard\nVERDICT: FAIL");
+
+    sandbox.commit(&repo, "lib.rs", "fn main() {}\n");
+    assert!(!sandbox.push(&repo).status.success());
+
+    fs::remove_file(&prompt).unwrap();
+    sandbox.commit(&repo, "lib.rs", "fn fixed() {}\n");
+    assert!(sandbox.push(&repo).status.success());
+    assert!(!prompt.exists());
+    assert_eq!(sandbox.remote_head(&repo), sandbox.head(&repo));
+    let last_pushed = sandbox.head(&repo);
+
+    sandbox.commit(&repo, "more.rs", "fn more() {}\n");
+    assert!(!sandbox.push(&repo).status.success());
+    assert!(prompt.exists());
+    assert_eq!(sandbox.remote_head(&repo), last_pushed);
+}
+
+#[test]
+fn a_refusal_is_spent_by_any_push_of_that_ref_that_is_let_through() {
+    let sandbox = Sandbox::new();
+    sandbox.install();
+    let repo = sandbox.repo_with_one_pushed_commit();
+    let prompt = sandbox.fake_reviewer_dir().join("prompt");
+    sandbox.reviewer_replies("VERDICT: FAIL");
+    let push_topic = |refspec: &str| sandbox.git(&repo, &["push", "origin", refspec]).status.success();
+
+    sandbox.commit(&repo, "lib.rs", "fn main() {}\n");
+    assert!(!push_topic("HEAD:refs/heads/topic"));
+    assert!(push_topic("HEAD~1:refs/heads/topic"));
+    assert!(push_topic(":refs/heads/topic"));
+
+    fs::remove_file(&prompt).unwrap();
+    assert!(!push_topic("HEAD:refs/heads/topic"));
+    assert!(prompt.exists());
 }

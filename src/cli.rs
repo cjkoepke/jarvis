@@ -26,6 +26,8 @@ pub enum Cmd {
         #[arg(long, value_enum, default_value_t = Format::Table, help = "`table` for a person, `json` for an agent.")]
         format: Format,
     },
+    #[command(about = "Choose defaults such as the pre-push reviewer with the arrow keys.")]
+    Settings,
     #[command(hide = true)]
     Hook { agent: String, event: String },
     #[command(hide = true, name = "pre-push")]
@@ -36,8 +38,6 @@ pub enum Cmd {
 }
 
 impl Cmd {
-    /// @agent These commands run inside an agent session or a `git push`. They must
-    /// exit 0 on their own failures so jarvis is never the reason either one breaks.
     pub fn runs_inside_agent_or_git(&self) -> bool {
         matches!(self, Cmd::Hook { .. } | Cmd::PrePush { .. })
     }

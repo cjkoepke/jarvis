@@ -1,8 +1,6 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
-/// @agent Everything jarvis reads or writes hangs off `home`, so `--home` can point
-/// a whole install at a throwaway directory. Never resolve a path from `$HOME` directly.
 #[derive(Debug, Clone)]
 pub struct Env {
     pub home: PathBuf,
@@ -28,6 +26,14 @@ impl Env {
 
     pub fn installed_standards_dir(&self) -> PathBuf {
         self.jarvis_dir().join("standards")
+    }
+
+    pub fn settings_file(&self) -> PathBuf {
+        self.jarvis_dir().join("settings.toml")
+    }
+
+    pub fn refused_pushes_file(&self) -> PathBuf {
+        self.jarvis_dir().join("refused-pushes.json")
     }
 
     pub fn install_record_file(&self) -> PathBuf {

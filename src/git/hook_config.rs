@@ -3,14 +3,9 @@ use crate::paths::Env;
 use anyhow::Result;
 use std::path::PathBuf;
 
-/// @agent A hook defined in git config runs in addition to a repository's own
-/// hooks, so husky, lefthook and pre-commit keep working. Do not switch to
-/// `core.hooksPath`: it silently disables the hooks in `.git/hooks`.
 const SECTION: &str = "hook.jarvis";
 const EVENT: &str = "pre-push";
 
-/// @agent Hooks defined in git config arrived in Git 2.54. Older versions ignore
-/// the section, so the review never runs there.
 pub const MINIMUM_GIT_VERSION: (u32, u32) = (2, 54);
 
 pub enum Registration {

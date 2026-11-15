@@ -4,8 +4,6 @@ use crate::standards::Standards;
 use crate::ui::message;
 use std::process::ExitCode;
 
-/// @agent Always succeeds, and prints nothing to stdout when it cannot deliver. A
-/// session has to start without the standards rather than fail because of jarvis.
 pub fn run(env: &Env, agent_id: &str, event: &str) -> ExitCode {
     let Some(agent) = agents::by_id(agent_id) else {
         message::error(&format!("unknown agent `{agent_id}`"));

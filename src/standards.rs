@@ -1,12 +1,8 @@
 use crate::files::{has_extension, sorted_entries};
-use crate::settings::Settings;
 use anyhow::{bail, Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// @agent Claude Code drops hook context longer than 10,000 characters
-/// (https://code.claude.com/docs/en/hooks). The cap sits well below that because a
-/// core this long stops being followed.
 pub const CORE_MAX_CHARS: usize = 6000;
 
 const SKILL_FILE: &str = "SKILL.md";
@@ -25,7 +21,6 @@ impl Skill {
 pub struct Standards {
     pub core: String,
     pub skills: Vec<Skill>,
-    pub settings: Settings,
 }
 
 impl Standards {
@@ -33,7 +28,6 @@ impl Standards {
         Ok(Standards {
             core: load_core(&root.join("core"))?,
             skills: load_skills(&root.join("skills"))?,
-            settings: Settings::load(&root.join("settings.toml"))?,
         })
     }
 }

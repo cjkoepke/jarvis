@@ -2,6 +2,7 @@ use crate::agents::{self, Agent};
 use crate::files::find_on_path;
 use crate::git::outgoing::Outgoing;
 use crate::paths::Env;
+use crate::settings::ReviewSettings;
 use crate::standards::{Skill, Standards};
 use anyhow::{bail, Context, Result};
 use std::fmt;
@@ -34,8 +35,7 @@ impl fmt::Display for Reviewer<'_> {
     }
 }
 
-pub fn choose(standards: &Standards) -> Result<Reviewer<'_>> {
-    let settings = &standards.settings.review;
+pub fn choose<'a>(standards: &'a Standards, settings: &'a ReviewSettings) -> Result<Reviewer<'a>> {
     let agent = agents::by_id(&settings.agent).with_context(|| format!("unknown review agent `{}`", settings.agent))?;
     if find_on_path(agent.executable_name()).is_none() {
         bail!("`{}` is not on PATH", agent.executable_name());
