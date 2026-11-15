@@ -207,6 +207,26 @@ fn reviewer_gets_the_core_the_review_skill_and_only_the_commits_the_remote_lacks
 }
 
 #[test]
+fn settings_in_the_jarvis_folder_choose_the_reviewer_and_outlast_an_install() {
+    let sandbox = Sandbox::new();
+    sandbox.install();
+    let repo = sandbox.repo_with_one_pushed_commit();
+    let settings = sandbox.home.join(".jarvis/settings.toml");
+    let codex = sandbox.fake_reviewer_dir().join("codex");
+    let codex_ran = sandbox.fake_reviewer_dir().join("codex-ran");
+    fs::write(&codex, "#!/bin/sh\ntouch \"$(dirname \"$0\")/codex-ran\"\necho 'VERDICT: PASS'\n").unwrap();
+    fs::set_permissions(&codex, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(&settings, "[review]\nagent = \"codex\"\n").unwrap();
+
+    sandbox.install();
+    sandbox.commit(&repo, "lib.rs", "fn main() {}\n");
+    assert!(sandbox.push(&repo).status.success());
+
+    assert!(codex_ran.exists());
+    assert_eq!(fs::read_to_string(&settings).unwrap(), "[review]\nagent = \"codex\"\n");
+}
+
+#[test]
 fn reviewer_decides_the_push_and_a_broken_reviewer_never_stops_one() {
     let sandbox = Sandbox::new();
     sandbox.install();

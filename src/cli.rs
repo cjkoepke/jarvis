@@ -26,6 +26,8 @@ pub enum Cmd {
         #[arg(long, value_enum, default_value_t = Format::Table, help = "`table` for a person, `json` for an agent.")]
         format: Format,
     },
+    #[command(about = "Choose defaults such as the pre-push reviewer with the arrow keys.")]
+    Settings,
     #[command(hide = true)]
     Hook { agent: String, event: String },
     #[command(hide = true, name = "pre-push")]

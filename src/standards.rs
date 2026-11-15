@@ -1,5 +1,4 @@
 use crate::files::{has_extension, sorted_entries};
-use crate::settings::Settings;
 use anyhow::{bail, Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -22,7 +21,6 @@ impl Skill {
 pub struct Standards {
     pub core: String,
     pub skills: Vec<Skill>,
-    pub settings: Settings,
 }
 
 impl Standards {
@@ -30,7 +28,6 @@ impl Standards {
         Ok(Standards {
             core: load_core(&root.join("core"))?,
             skills: load_skills(&root.join("skills"))?,
-            settings: Settings::load(&root.join("settings.toml"))?,
         })
     }
 }

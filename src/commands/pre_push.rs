@@ -2,6 +2,7 @@ use crate::git::outgoing::{Outgoing, PushedRef};
 use crate::paths::Env;
 use crate::review::reviewer;
 use crate::review::verdict::{self, Verdict};
+use crate::settings::Settings;
 use crate::standards::Standards;
 use crate::ui::{message, Tone};
 use anyhow::{Context, Result};
@@ -24,7 +25,8 @@ fn review(env: &Env, git_args: &[String]) -> Result<ExitCode> {
     }
 
     let standards = Standards::load(&env.installed_standards_dir())?;
-    let reviewer = reviewer::choose(&standards)?;
+    let settings = Settings::load(&env.settings_file())?;
+    let reviewer = reviewer::choose(&standards, &settings.review)?;
     message::review_verdict(
         Tone::Muted,
         &format!("{reviewer} is reviewing the outgoing commits. This can take a few minutes."),

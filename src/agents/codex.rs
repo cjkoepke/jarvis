@@ -1,4 +1,4 @@
-use super::{codex_trust, Agent, Approval};
+use super::{codex_models, codex_trust, Agent, Approval, ReviewModel};
 use crate::paths::Env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -28,6 +28,10 @@ impl Agent for Codex {
 
     fn context_events(&self) -> &'static [&'static str] {
         &["SessionStart", "SubagentStart"]
+    }
+
+    fn review_models(&self, env: &Env) -> Vec<ReviewModel> {
+        codex_models::offered(env)
     }
 
     fn approval(&self, env: &Env) -> Approval {

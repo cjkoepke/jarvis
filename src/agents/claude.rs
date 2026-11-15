@@ -1,4 +1,4 @@
-use super::Agent;
+use super::{claude_models, Agent, ReviewModel};
 use crate::paths::Env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -36,6 +36,10 @@ impl Agent for Claude {
 
     fn context_events(&self) -> &'static [&'static str] {
         &["SessionStart", "SubagentStart"]
+    }
+
+    fn review_models(&self, env: &Env) -> Vec<ReviewModel> {
+        claude_models::offered(env)
     }
 
     fn review_command(&self, standards_dir: &Path, model: Option<&str>) -> Command {
