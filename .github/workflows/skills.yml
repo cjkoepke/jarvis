@@ -1,11 +1,6 @@
 name: skills
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "standards/skills/**"
-      - ".github/workflows/skills.yml"
   pull_request:
     paths:
       - "standards/skills/**"
