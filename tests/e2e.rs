@@ -231,13 +231,8 @@ fn reviewer_decides_the_push_and_a_broken_reviewer_never_stops_one() {
     let sandbox = Sandbox::new();
     sandbox.install();
     let repo = sandbox.repo_with_one_pushed_commit();
-    let last_pushed = sandbox.head(&repo);
 
     sandbox.commit(&repo, "lib.rs", "fn main() {}\n");
-    sandbox.reviewer_replies("lib.rs:1 breaks a standard\nVERDICT: FAIL");
-    assert!(!sandbox.push(&repo).status.success());
-    assert_eq!(sandbox.remote_head(&repo), last_pushed);
-
     sandbox.reviewer_replies("VERDICT: PASS");
     assert!(sandbox.push(&repo).status.success());
     assert_eq!(sandbox.remote_head(&repo), sandbox.head(&repo));
@@ -246,4 +241,34 @@ fn reviewer_decides_the_push_and_a_broken_reviewer_never_stops_one() {
     sandbox.reviewer_replies("I could not finish the review.");
     assert!(sandbox.push(&repo).status.success());
     assert_eq!(sandbox.remote_head(&repo), sandbox.head(&repo));
+    let last_pushed = sandbox.head(&repo);
+
+    sandbox.commit(&repo, "bad.rs", "fn bad() {}\n");
+    sandbox.reviewer_replies("bad.rs:1 breaks a standard\nVERDICT: FAIL");
+    assert!(!sandbox.push(&repo).status.success());
+    assert_eq!(sandbox.remote_head(&repo), last_pushed);
+}
+
+#[test]
+fn a_refused_push_goes_out_unreviewed_on_the_next_attempt_and_the_review_returns_after_it() {
+    let sandbox = Sandbox::new();
+    sandbox.install();
+    let repo = sandbox.repo_with_one_pushed_commit();
+    let prompt = sandbox.fake_reviewer_dir().join("prompt");
+    sandbox.reviewer_replies("lib.rs:1 breaks a standard\nVERDICT: FAIL");
+
+    sandbox.commit(&repo, "lib.rs", "fn main() {}\n");
+    assert!(!sandbox.push(&repo).status.success());
+
+    fs::remove_file(&prompt).unwrap();
+    sandbox.commit(&repo, "lib.rs", "fn fixed() {}\n");
+    assert!(sandbox.push(&repo).status.success());
+    assert!(!prompt.exists());
+    assert_eq!(sandbox.remote_head(&repo), sandbox.head(&repo));
+    let last_pushed = sandbox.head(&repo);
+
+    sandbox.commit(&repo, "more.rs", "fn more() {}\n");
+    assert!(!sandbox.push(&repo).status.success());
+    assert!(prompt.exists());
+    assert_eq!(sandbox.remote_head(&repo), last_pushed);
 }

@@ -18,7 +18,8 @@ one folder and makes them count everywhere.
   needs them.
 - **A review before every push.** An agent reads your outgoing commits against
   the same standards. If something breaks them, the push is refused and the
-  agent that pushed reads why, fixes it and pushes again.
+  agent that pushed reads why, fixes it and pushes again. A push is only ever
+  reviewed once, so the fix goes straight out.
 - **Out of your way.** Launch agents however you like. A review that cannot run
   never blocks a push, and `uninstall` puts everything back as it was.
 

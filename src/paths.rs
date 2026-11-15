@@ -32,6 +32,10 @@ impl Env {
         self.jarvis_dir().join("settings.toml")
     }
 
+    pub fn refused_pushes_file(&self) -> PathBuf {
+        self.jarvis_dir().join("refused-pushes.json")
+    }
+
     pub fn install_record_file(&self) -> PathBuf {
         self.jarvis_dir().join("install.json")
     }

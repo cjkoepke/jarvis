@@ -3,16 +3,20 @@ use anyhow::Result;
 
 pub struct PushedRef {
     pub local_sha: String,
+    pub remote_ref: String,
+    pub remote_sha: String,
 }
 
 impl PushedRef {
     pub fn parse(stdin_line: &str) -> Option<PushedRef> {
         let fields: Vec<&str> = stdin_line.split_whitespace().collect();
-        let [_local_ref, local_sha, _remote_ref, _remote_sha] = fields[..] else {
+        let [_local_ref, local_sha, remote_ref, remote_sha] = fields[..] else {
             return None;
         };
         Some(PushedRef {
             local_sha: local_sha.to_string(),
+            remote_ref: remote_ref.to_string(),
+            remote_sha: remote_sha.to_string(),
         })
     }
 

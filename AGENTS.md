@@ -42,7 +42,9 @@ try it from an agent session.
   settings name with the `review` skill. Claude Code may only read files and
   run `git log`, `git show`, `git diff` and `printenv`; Codex runs in its
   read-only sandbox. Violations refuse the push and are printed to the caller,
-  so an agent that ran `git push` reads them as the command's output.
+  so an agent that ran `git push` reads them as the command's output. A push
+  is reviewed once: after a refusal the next attempt goes out without a review,
+  and the push after that is reviewed again.
 - **`status`** shows checks on the standards, each agent's hooks and skills,
   the git hook and the reviewer. `--format json` prints the same for an agent.
   It only reports, and each failed row says how to fix it.
@@ -81,6 +83,12 @@ try it from an agent session.
   `<local ref> <local sha> <remote ref> <remote sha>`, where an all-zero sha
   means no commit. Results go to stderr, which git relays to whoever ran
   `git push`.
+- **One review per push.** A refusal is recorded in
+  `~/.jarvis/refused-pushes.json` as the remote URL and ref with the tip that
+  ref had on the remote. The next push skips its review only while the remote
+  ref still has that tip, and the record is dropped as soon as a push is let
+  through. So the pass is spent once and cannot outlive a push, even one made
+  from another clone.
 - **Hook files.** jarvis hooks are matched loosely, not on the exact command,
   so hooks written by a binary at an older path are still replaced. A hook file
   that is not a JSON object is an error: jarvis never overwrites configuration
