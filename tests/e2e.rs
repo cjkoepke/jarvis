@@ -272,3 +272,22 @@ fn a_refused_push_goes_out_unreviewed_on_the_next_attempt_and_the_review_returns
     assert!(prompt.exists());
     assert_eq!(sandbox.remote_head(&repo), last_pushed);
 }
+
+#[test]
+fn a_refusal_is_spent_by_any_push_of_that_ref_that_is_let_through() {
+    let sandbox = Sandbox::new();
+    sandbox.install();
+    let repo = sandbox.repo_with_one_pushed_commit();
+    let prompt = sandbox.fake_reviewer_dir().join("prompt");
+    sandbox.reviewer_replies("VERDICT: FAIL");
+    let push_topic = |refspec: &str| sandbox.git(&repo, &["push", "origin", refspec]).status.success();
+
+    sandbox.commit(&repo, "lib.rs", "fn main() {}\n");
+    assert!(!push_topic("HEAD:refs/heads/topic"));
+    assert!(push_topic("HEAD~1:refs/heads/topic"));
+    assert!(push_topic(":refs/heads/topic"));
+
+    fs::remove_file(&prompt).unwrap();
+    assert!(!push_topic("HEAD:refs/heads/topic"));
+    assert!(prompt.exists());
+}

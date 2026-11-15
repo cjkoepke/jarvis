@@ -10,46 +10,86 @@ use anyhow::{Context, Result};
 use std::io::Read;
 use std::process::ExitCode;
 
-pub fn run(env: &Env, git_args: &[String]) -> ExitCode {
-    review(env, git_args).unwrap_or_else(|error| {
-        message::review_verdict(Tone::Caution, &format!("review skipped ({error:#}). The push continues."));
-        ExitCode::SUCCESS
-    })
+struct Push {
+    remote: String,
+    remote_url: String,
+    refs: Vec<PushedRef>,
 }
 
-fn review(env: &Env, git_args: &[String]) -> Result<ExitCode> {
-    let remote = git_args.first().context("git named no remote")?;
-    let remote_url = git_args.get(1).unwrap_or(remote);
-    let pushed = refs_with_commits_the_remote_lacks(remote)?;
-    if pushed.is_empty() {
-        return Ok(ExitCode::SUCCESS);
-    }
-
-    let mut refused = RefusedPushes::load(env);
-    let unreviewed: Vec<&PushedRef> = pushed.iter().filter(|pushed| !refused.holds(remote_url, pushed)).collect();
-    let verdict = if unreviewed.is_empty() {
-        message::review_verdict(Tone::Muted, "already reviewed once, so this push goes out without another review.");
-        Verdict::Pass
-    } else {
-        ask_reviewer(env, remote, &unreviewed)?
-    };
-
-    let before = refused.clone();
-    match verdict {
-        Verdict::Pass => pushed.iter().for_each(|pushed| refused.forget(remote_url, pushed)),
-        Verdict::Fail => unreviewed.iter().for_each(|pushed| refused.remember(remote_url, pushed)),
-    }
-    if refused != before {
-        refused.save(env)?;
-    }
-
-    Ok(match verdict {
-        Verdict::Pass => ExitCode::SUCCESS,
-        Verdict::Fail => {
-            let next_step = "push refused. Fix the findings above, commit, and push again. That push goes out without another review.";
-            message::review_verdict(Tone::Bad, next_step);
-            ExitCode::FAILURE
+pub fn run(env: &Env, git_args: &[String]) -> ExitCode {
+    let push = match Push::read(git_args) {
+        Ok(push) => push,
+        Err(error) => {
+            review_skipped(&error);
+            return ExitCode::SUCCESS;
         }
+    };
+    let mut refused = RefusedPushes::load(env);
+    let recorded = refused.clone();
+
+    let refused_now = refs_to_refuse(env, &push, &refused).unwrap_or_else(|error| {
+        review_skipped(&error);
+        Vec::new()
+    });
+    if refused_now.is_empty() {
+        push.refs.iter().for_each(|pushed| refused.forget(&push.remote_url, pushed));
+    } else {
+        refused_now.iter().for_each(|pushed| refused.remember(&push.remote_url, pushed));
+    }
+    if refused != recorded {
+        if let Err(error) = refused.save(env) {
+            message::review_verdict(Tone::Caution, &format!("{error:#}"));
+        }
+    }
+
+    if refused_now.is_empty() {
+        return ExitCode::SUCCESS;
+    }
+    let next_step = "push refused. Fix the findings above, commit, and push again. That push goes out without another review.";
+    message::review_verdict(Tone::Bad, next_step);
+    ExitCode::FAILURE
+}
+
+impl Push {
+    fn read(git_args: &[String]) -> Result<Push> {
+        let remote = git_args.first().context("git named no remote")?;
+        let mut refs_being_pushed = String::new();
+        std::io::stdin().read_to_string(&mut refs_being_pushed)?;
+        Ok(Push {
+            remote: remote.clone(),
+            remote_url: git_args.get(1).unwrap_or(remote).clone(),
+            refs: refs_being_pushed.lines().filter_map(PushedRef::parse).collect(),
+        })
+    }
+}
+
+fn review_skipped(error: &anyhow::Error) {
+    message::review_verdict(Tone::Caution, &format!("review skipped ({error:#}). The push continues."));
+}
+
+fn refs_to_refuse<'a>(env: &Env, push: &'a Push, refused: &RefusedPushes) -> Result<Vec<&'a PushedRef>> {
+    let mut unreviewed = Vec::new();
+    let mut some_were_refused_before = false;
+    for pushed in &push.refs {
+        if pushed.deletes_the_ref() || !pushed.has_commits_the_remote_lacks(&push.remote)? {
+            continue;
+        }
+        if refused.holds(&push.remote_url, pushed) {
+            some_were_refused_before = true;
+        } else {
+            unreviewed.push(pushed);
+        }
+    }
+
+    if unreviewed.is_empty() {
+        if some_were_refused_before {
+            message::review_verdict(Tone::Muted, "already reviewed once, so this push goes out without another review.");
+        }
+        return Ok(Vec::new());
+    }
+    Ok(match ask_reviewer(env, &push.remote, &unreviewed)? {
+        Verdict::Pass => Vec::new(),
+        Verdict::Fail => unreviewed,
     })
 }
 
@@ -80,17 +120,4 @@ fn ask_reviewer(env: &Env, remote: &str, unreviewed: &[&PushedRef]) -> Result<Ve
         message::review_verdict(Tone::Good, "review passed.");
     }
     Ok(review.verdict)
-}
-
-fn refs_with_commits_the_remote_lacks(remote: &str) -> Result<Vec<PushedRef>> {
-    let mut refs_being_pushed = String::new();
-    std::io::stdin().read_to_string(&mut refs_being_pushed)?;
-
-    let mut pushed_refs = Vec::new();
-    for pushed in refs_being_pushed.lines().filter_map(PushedRef::parse) {
-        if !pushed.deletes_the_ref() && pushed.has_commits_the_remote_lacks(remote)? {
-            pushed_refs.push(pushed);
-        }
-    }
-    Ok(pushed_refs)
 }
