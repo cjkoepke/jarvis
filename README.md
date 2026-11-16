@@ -49,9 +49,6 @@ A standards folder has two parts:
 
 The `standards/` folder in this repository is a working example to start from.
 
-## Status
-
-jarvis is an early proof of concept. The reviewer reports what it finds and
-does not fix it yet.
+## Contributing
 
 Working on jarvis itself? See [AGENTS.md](AGENTS.md).

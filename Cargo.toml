@@ -2,7 +2,7 @@
 name = "jarvis"
 version = "0.0.1"
 edition = "2021"
-description = "Proof of concept: puts my working standards into every AI agent session and reviews changes before push."
+description = "Puts your working standards into every AI agent session and reviews changes before push."
 publish = false
 
 [dependencies]
