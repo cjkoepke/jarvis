@@ -1,0 +1,18 @@
+{
+  "sandbox": {
+    "enabled": true
+  },
+  "editorMode": "normal",
+  "enableWorkflows": true,
+  "ultracode": true,
+  "permissions": {
+    "allow": [
+      "Edit(/**)",
+      "Bash(sed *)",
+      "Bash(git status *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git restore *)"
+    ]
+  }
+}
