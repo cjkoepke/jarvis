@@ -1,5 +1,5 @@
 use super::screen::{Key, Screen};
-use super::{footer, heading, row_line, Answer};
+use super::{footer, heading, row_line, Answer, RowLine};
 use crate::ui::Tone;
 use anyhow::Result;
 
@@ -54,7 +54,12 @@ impl Checklist<'_> {
             } else {
                 format!("{} ", Tone::Muted.paint("○"))
             };
-            row_line(index == cursor, &checkbox, &format!("{:<label_width$}", item.label), &item.note)
+            row_line(RowLine {
+                under_cursor: index == cursor,
+                mark: &checkbox,
+                label: &format!("{:<label_width$}", item.label),
+                note: &item.note,
+            })
         });
 
         let mut lines = heading(self.title, self.subtitle);

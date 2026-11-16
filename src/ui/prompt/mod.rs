@@ -34,7 +34,20 @@ fn footer(help: &str) -> Vec<String> {
     vec![String::new(), Tone::Muted.paint(help)]
 }
 
-fn row_line(under_cursor: bool, mark: &str, label: &str, note: &str) -> String {
+struct RowLine<'a> {
+    under_cursor: bool,
+    mark: &'a str,
+    label: &'a str,
+    note: &'a str,
+}
+
+fn row_line(row: RowLine<'_>) -> String {
+    let RowLine {
+        under_cursor,
+        mark,
+        label,
+        note,
+    } = row;
     let pointer = if under_cursor { Tone::Good.paint("❯") } else { " ".to_string() };
     let label = if under_cursor {
         Tone::Strong.paint(label)

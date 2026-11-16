@@ -1,5 +1,5 @@
 use super::screen::{Key, Screen};
-use super::{footer, heading, row_line, Answer};
+use super::{footer, heading, row_line, Answer, RowLine};
 use crate::ui::Tone;
 use anyhow::Result;
 
@@ -49,7 +49,12 @@ impl Picker<'_> {
                 Radio::Filled => format!("{} ", Tone::Good.paint("●")),
                 Radio::Empty => format!("{} ", Tone::Muted.paint("○")),
             };
-            row_line(index == self.cursor, &radio, &format!("{:<label_width$}", row.label), &row.note)
+            row_line(RowLine {
+                under_cursor: index == self.cursor,
+                mark: &radio,
+                label: &format!("{:<label_width$}", row.label),
+                note: &row.note,
+            })
         });
 
         let mut lines = heading(self.title, self.subtitle);
