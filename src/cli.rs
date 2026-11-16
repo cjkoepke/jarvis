@@ -28,6 +28,11 @@ pub enum Cmd {
     },
     #[command(about = "Choose defaults such as the pre-push reviewer with the arrow keys.")]
     Settings,
+    #[command(about = "Let the reviewer fix what it finds in the repository you are in, or check that it may.")]
+    Repo {
+        #[command(subcommand)]
+        command: RepoCmd,
+    },
     #[command(hide = true)]
     Hook { agent: String, event: String },
     #[command(hide = true, name = "pre-push")]
@@ -41,6 +46,22 @@ impl Cmd {
     pub fn runs_inside_agent_or_git(&self) -> bool {
         matches!(self, Cmd::Hook { .. } | Cmd::PrePush { .. })
     }
+}
+
+#[derive(Subcommand)]
+pub enum RepoCmd {
+    #[command(about = "Trust this repository in each agent and give a fixing reviewer the permissions it needs.")]
+    Init {
+        #[arg(long, short, help = "Trust the repository without being asked.")]
+        yes: bool,
+    },
+    #[command(
+        about = "Show whether each agent lets a fixing reviewer edit and commit in this repository, and offer to fix what is missing."
+    )]
+    Audit {
+        #[arg(long, value_enum, default_value_t = Format::Table, help = "`table` for a person, `json` for an agent.")]
+        format: Format,
+    },
 }
 
 #[derive(Clone, Copy, ValueEnum)]

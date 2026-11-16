@@ -14,7 +14,7 @@ pub fn run(agent: &dyn Agent, env: &Env, standards: &Standards) -> Vec<Check> {
     checks
 }
 
-fn subject<'a>(agent: &'a dyn Agent, name: &'a str) -> CheckSubject<'a> {
+pub(super) fn subject<'a>(agent: &'a dyn Agent, name: &'a str) -> CheckSubject<'a> {
     CheckSubject {
         area: agent.display_name(),
         name,

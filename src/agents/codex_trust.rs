@@ -1,5 +1,5 @@
 use super::hooks_file::{self, RegisteredHook};
-use super::{Agent, Approval};
+use super::{codex, Agent, Approval};
 use crate::paths::Env;
 use std::fs;
 use std::path::Path;
@@ -31,7 +31,7 @@ pub fn approval(agent: &dyn Agent, env: &Env) -> Approval {
 }
 
 fn hook_states(env: &Env) -> Option<Table> {
-    let config: Table = fs::read_to_string(env.home.join(".codex/config.toml")).ok()?.parse().ok()?;
+    let config: Table = fs::read_to_string(codex::config_file(env)).ok()?.parse().ok()?;
     config.get("hooks")?.get("state")?.as_table().cloned()
 }
 

@@ -1,13 +1,17 @@
 pub mod checks;
 mod claude;
 mod claude_models;
+mod claude_repo;
+mod claude_repo_trust;
 mod codex;
 mod codex_models;
+mod codex_repo;
 mod codex_trust;
 pub mod hooks_file;
 mod json_config;
 pub mod skills;
 
+use crate::check::requirement::Requirement;
 use crate::git::repo::Repo;
 use crate::paths::Env;
 use anyhow::{Context, Result};
@@ -47,6 +51,10 @@ pub trait Agent: Sync {
     /// The same run without its read-only limits, so the person's and the repository's
     /// own agent settings decide whether it may edit files and commit them.
     fn fixing_review_command(&self, run: &ReviewRun) -> Command;
+
+    /// What this agent's own settings must hold before a fixing reviewer may edit and
+    /// commit in `repo`.
+    fn fixing_requirements<'a>(&self, env: &'a Env, repo: &'a Repo) -> Vec<Requirement<'a>>;
 
     /// The models `jarvis settings` offers for the review. Any other name can be typed there.
     fn review_models(&self, env: &Env) -> Vec<ReviewModel>;

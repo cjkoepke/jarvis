@@ -1,4 +1,6 @@
-use super::{codex_models, codex_trust, Agent, Approval, ReviewModel, ReviewRun};
+use super::{codex_models, codex_repo, codex_trust, Agent, Approval, ReviewModel, ReviewRun};
+use crate::check::requirement::Requirement;
+use crate::git::repo::Repo;
 use crate::paths::Env;
 use std::path::PathBuf;
 use std::process::Command;
@@ -8,6 +10,10 @@ const REACH_THE_SIGNING_AGENT: &str = "sandbox_workspace_write.network_access=tr
 const PROMPT_ON_STDIN: &str = "-";
 
 pub struct Codex;
+
+pub(super) fn config_file(env: &Env) -> PathBuf {
+    env.home.join(".codex/config.toml")
+}
 
 impl Codex {
     fn headless_command(&self, run: &ReviewRun) -> Command {
@@ -69,5 +75,9 @@ impl Agent for Codex {
         }
         command.arg(PROMPT_ON_STDIN);
         command
+    }
+
+    fn fixing_requirements<'a>(&self, env: &'a Env, repo: &'a Repo) -> Vec<Requirement<'a>> {
+        codex_repo::fixing_requirements(self, env, repo)
     }
 }
