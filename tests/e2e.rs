@@ -340,6 +340,23 @@ fn a_reviewer_does_not_fix_a_push_of_refs_its_commits_would_not_follow() {
 }
 
 #[test]
+fn a_fixing_reviewer_finds_the_gpg_agent_started_when_the_repository_signs_commits() {
+    let sandbox = Sandbox::new();
+    sandbox.install();
+    fs::write(sandbox.home.join(".jarvis/settings.toml"), "[review]\nfix = true\n").unwrap();
+    let fake_gpgconf = sandbox.fake_reviewer_dir().join("gpgconf");
+    let gpgconf_args = sandbox.fake_reviewer_dir().join("gpgconf-args");
+    fs::write(&fake_gpgconf, "#!/bin/sh\necho \"$@\" > \"$(dirname \"$0\")/gpgconf-args\"\n").unwrap();
+    fs::set_permissions(&fake_gpgconf, fs::Permissions::from_mode(0o755)).unwrap();
+    let repo = sandbox.repo_with_one_pushed_commit();
+    sandbox.commit(&repo, "lib.rs", "fn main() {}\n");
+    sandbox.git_output(&repo, &["config", "commit.gpgsign", "true"]);
+
+    assert!(sandbox.push(&repo).status.success());
+    assert_eq!(fs::read_to_string(gpgconf_args).unwrap().trim(), "--launch gpg-agent");
+}
+
+#[test]
 fn install_falls_back_to_the_checkout_it_was_built_from_when_the_last_folder_is_gone() {
     let sandbox = Sandbox::new();
     let record_file = sandbox.home.join(".jarvis/install.json");

@@ -118,10 +118,12 @@ try it from an agent session.
   with `--add-dir`; a linked worktree has two. A signing agent is reached over
   a socket, which the sandbox counts as network, so network access is switched
   on only when `commit.gpgsign` is set.
-- **Signing without a terminal.** A reviewer has no terminal for a passphrase
-  prompt, so a signed commit only works while the signing agent has the key
-  unlocked. When it does not, the reviewer undoes its edit and the push is
-  refused for the pusher to fix.
+- **Signing a fix.** A sandboxed reviewer can reach a running gpg-agent but
+  cannot start one, so jarvis starts it before a fixing run when the
+  repository signs commits with GPG. A locked key is then unlocked through the
+  agent's own pinentry. A reviewer has no terminal, so a pinentry that needs
+  one fails; the reviewer then undoes its edit and the push is refused for the
+  pusher to fix.
 - **`printenv` takes one name.** macOS `printenv` prints only the first
   variable it is given, so the review skill reads each on its own line.
 - **Standards the binary was built from.** Cargo bakes the checkout path in at

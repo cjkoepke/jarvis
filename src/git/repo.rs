@@ -1,6 +1,10 @@
 use crate::git;
 use anyhow::Result;
 use std::path::PathBuf;
+use std::process::Command;
+
+const GPG_CONTROL: &str = "gpgconf";
+const SSH_SIGNING: &str = "ssh";
 
 /// The repository a push comes from, as a fixing reviewer needs to know it.
 pub struct Repo {
@@ -22,5 +26,13 @@ impl Repo {
             git_dirs,
             signs_commits,
         })
+    }
+
+    /// A sandboxed reviewer can reach a running gpg-agent but cannot start one.
+    pub fn start_signing_agent(&self) {
+        let signs_with_ssh = git::run(&["config", "--get", "gpg.format"]).is_ok_and(|format| format == SSH_SIGNING);
+        if self.signs_commits && !signs_with_ssh {
+            Command::new(GPG_CONTROL).args(["--launch", "gpg-agent"]).output().ok();
+        }
     }
 }

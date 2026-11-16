@@ -74,6 +74,7 @@ pub fn ask(reviewer: &Reviewer, env: &Env, outgoing: &Outgoing) -> Result<String
         model: reviewer.model,
     };
     let mut command = if reviewer.may_fix {
+        repo.start_signing_agent();
         agent.fixing_review_command(&run)
     } else {
         agent.review_command(&run)
