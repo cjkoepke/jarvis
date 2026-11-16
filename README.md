@@ -28,12 +28,13 @@ one folder and makes them count everywhere.
 
 ```sh
 cargo install --path .
-jarvis install --standards ./standards
+jarvis install
 ```
 
 | Command | Does |
 | --- | --- |
-| `jarvis install` | Sets up your agents and the push review from a standards folder. |
+| `jarvis install` | Sets up your agents and the push review with the standards jarvis ships and your own. |
+| `jarvis clone` | Copies a core file or a skill into `~/.jarvis/custom`, where you change it. |
 | `jarvis status` | Shows what is in place and how to fix what is not. |
 | `jarvis settings` | Picks the reviewer, its model and whether it fixes what it finds, with the arrow keys. |
 | `jarvis repo init` | Lets the reviewer fix in the repository you are in. It asks before it trusts the repository in each agent, then adds the rules to edit and commit. Both apply to every session of those agents there. |
@@ -45,12 +46,20 @@ the hooks once with `/hooks`.
 
 ## Your standards
 
-A standards folder has two parts:
+jarvis ships with a set of standards in two parts:
 
 - `core/` is short and always in context.
 - `skills/` holds one folder per procedure, loaded when a task calls for it.
 
-The `standards/` folder in this repository is a working example to start from.
+Make them yours in `~/.jarvis/custom`, which has the same two parts. A core
+file or a skill there replaces the shipped one with its name, and one with a
+new name is added. `jarvis clone` copies a shipped one there to start from, and
+the next `jarvis install` delivers the result. Whatever you have not cloned
+keeps changing with jarvis.
+
+To start from a whole set of your own instead of the shipped one, name its
+folder once with `jarvis install --standards <folder>`; `~/.jarvis/custom` is
+laid over that too. `jarvis install --packaged` goes back to the shipped set.
 
 ## Contributing
 

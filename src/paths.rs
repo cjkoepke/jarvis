@@ -28,6 +28,16 @@ impl Env {
         self.jarvis_dir().join("standards")
     }
 
+    /// Where an install puts the standards together before they replace the installed ones.
+    pub fn next_standards_dir(&self) -> PathBuf {
+        self.jarvis_dir().join("standards.next")
+    }
+
+    /// A person's own core files and skills, which no command overwrites.
+    pub fn custom_standards_dir(&self) -> PathBuf {
+        self.jarvis_dir().join("custom")
+    }
+
     pub fn settings_file(&self) -> PathBuf {
         self.jarvis_dir().join("settings.toml")
     }

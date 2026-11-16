@@ -7,13 +7,18 @@ use crate::paths::Env;
 use crate::record::InstallRecord;
 use crate::review::reviewer;
 use crate::settings::Settings;
-use crate::standards::{Standards, CORE_MAX_CHARS};
+use crate::standards::source::Source;
+use crate::standards::{self, custom, Standards, CORE_MAX_CHARS};
 use anyhow::Result;
 use std::process::ExitCode;
 
 const STANDARDS: CheckSubject = CheckSubject {
     area: "Standards",
     name: "installed",
+};
+const CUSTOM: CheckSubject = CheckSubject {
+    area: "Standards",
+    name: "your own",
 };
 const GIT_VERSION: CheckSubject = CheckSubject {
     area: "Git",
@@ -38,12 +43,13 @@ fn gather(env: &Env) -> Vec<Check> {
     match (InstallRecord::load(env), &standards) {
         (Some(record), Ok(standards)) => {
             checks.push(standards_check(env, &record, standards));
+            checks.push(custom_check(env));
             for agent in record.agent_ids.iter().filter_map(|id| agents::by_id(id)) {
                 checks.extend(agents::checks::run(agent, env, standards));
             }
         }
         (Some(_), Err(error)) => checks.push(STANDARDS.fail(format!("{error:#}; run `jarvis install`"))),
-        (None, _) => checks.push(STANDARDS.fail("jarvis is not installed here; run `jarvis install --standards <folder>`")),
+        (None, _) => checks.push(STANDARDS.fail("jarvis is not installed here; run `jarvis install`")),
     }
     checks.push(git_version_check());
     checks.push(git_review_check(env));
@@ -59,20 +65,46 @@ fn standards_check(env: &Env, record: &InstallRecord, standards: &Standards) -> 
         standards.core.chars().count(),
         standards.skills.len()
     );
-    let source = &record.standards_source;
-    if !source.is_dir() {
+    let source = record.standards();
+    if let Some(gone) = source.folder().filter(|folder| !folder.is_dir()) {
         return STANDARDS.warn(format!(
-            "{contents}. The source {} is gone, so this copy cannot be compared with it",
-            source.display()
+            "{contents}. The source {} is gone; run `jarvis install` to use the packaged standards",
+            gone.display()
         ));
     }
-    if !same_contents(source, &env.installed_standards_dir(), None) {
-        return STANDARDS.warn(format!(
-            "out of date: {} changed since the last install; run `jarvis install`",
-            source.display()
+    match is_up_to_date(env, &source) {
+        Ok(true) => STANDARDS.ok(contents),
+        Ok(false) => STANDARDS.warn(format!(
+            "out of date: {source} or your own in {} changed since the last install; run `jarvis install`",
+            env.custom_standards_dir().display()
+        )),
+        Err(error) => STANDARDS.warn(format!("{contents}. This copy cannot be compared with its source: {error:#}")),
+    }
+}
+
+fn is_up_to_date(env: &Env, source: &Source) -> Result<bool> {
+    let delivered_now = tempfile::tempdir()?;
+    standards::assemble(source, &env.custom_standards_dir(), delivered_now.path())?;
+    Ok(same_contents(delivered_now.path(), &env.installed_standards_dir(), None))
+}
+
+fn custom_check(env: &Env) -> Check {
+    let custom_dir = env.custom_standards_dir();
+    let (pieces, unusable) = match custom::pieces(&custom_dir).and_then(|pieces| Ok((pieces, custom::unusable(&custom_dir)?))) {
+        Ok(found) => found,
+        Err(error) => return CUSTOM.fail(format!("{error:#}; repair that folder")),
+    };
+    if !unusable.is_empty() {
+        return CUSTOM.warn(format!(
+            "{} in {} are not delivered: a core file ends in `.md` and a skill is a folder holding `SKILL.md`",
+            unusable.join(", "),
+            custom_dir.display()
         ));
     }
-    STANDARDS.ok(contents)
+    if pieces.is_empty() {
+        return CUSTOM.ok("none; `jarvis clone` copies a core file or a skill to change");
+    }
+    CUSTOM.ok(format!("{} in {}", pieces.join(", "), custom_dir.display()))
 }
 
 fn git_version_check() -> Check {

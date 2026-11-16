@@ -37,6 +37,7 @@ fn main() -> ExitCode {
         Cmd::Install(args) => commands::install::run(&env, &args),
         Cmd::Uninstall => commands::uninstall::run(&env),
         Cmd::Status { format } => commands::status::run(&env, format),
+        Cmd::Clone { pieces } => commands::clone::run(&env, &pieces),
         Cmd::Settings => commands::settings::run(&env),
         Cmd::Repo { command } => commands::repo::run(&env, command),
         Cmd::Hook { agent, event } => Ok(commands::hook::run(&env, &agent, &event)),
