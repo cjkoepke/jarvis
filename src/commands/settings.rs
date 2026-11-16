@@ -52,15 +52,17 @@ pub fn run(env: &Env) -> Result<ExitCode> {
 enum Setting {
     ReviewAgent,
     ReviewModel,
+    FixFindings,
 }
 
 impl Setting {
-    const ALL: [Setting; 2] = [Setting::ReviewAgent, Setting::ReviewModel];
+    const ALL: [Setting; 3] = [Setting::ReviewAgent, Setting::ReviewModel, Setting::FixFindings];
 
     fn label(self) -> &'static str {
         match self {
             Setting::ReviewAgent => "Pre-push reviewer",
             Setting::ReviewModel => "Review model",
+            Setting::FixFindings => "When the review finds something",
         }
     }
 
@@ -68,6 +70,7 @@ impl Setting {
         let value = match self {
             Setting::ReviewAgent => agent_name(&review.agent).to_string(),
             Setting::ReviewModel => model_label(review, review.model.as_ref()),
+            Setting::FixFindings => fix_label(review.fix).to_string(),
         };
         Row {
             label: self.label().to_string(),
@@ -80,6 +83,7 @@ impl Setting {
         match self {
             Setting::ReviewAgent => choose_review_agent(screen, review),
             Setting::ReviewModel => choose_review_model(screen, env, review),
+            Setting::FixFindings => choose_review_fix(screen, review),
         }
     }
 }
@@ -153,6 +157,36 @@ fn choose_review_model(screen: &mut Screen, env: &Env, review: &mut ReviewSettin
         answer => answer.map(|chosen| models[chosen].clone()),
     };
     Ok(model.map(|model| review.model = model))
+}
+
+fn choose_review_fix(screen: &mut Screen, review: &mut ReviewSettings) -> Result<Answer<()>> {
+    let choices = [false, true];
+    let notes = [
+        "the push is refused and whoever pushed fixes it",
+        "the reviewer commits the fix where the repository's agent settings allow it; you push again",
+    ];
+    let rows = choices.iter().zip(notes).map(|(fix, note)| Row {
+        label: fix_label(*fix).to_string(),
+        note: note.to_string(),
+        radio: radio(*fix == review.fix),
+    });
+    let picker = Picker {
+        title: Setting::FixFindings.label(),
+        subtitle: "What happens to a push that breaks the standards.",
+        rows: rows.collect(),
+        cursor: usize::from(review.fix),
+        help: CHOICE_HELP,
+    };
+    let answer = picker.ask(screen)?;
+    Ok(answer.map(|chosen| review.fix = choices[chosen]))
+}
+
+fn fix_label(fix: bool) -> &'static str {
+    if fix {
+        "The reviewer fixes it"
+    } else {
+        "Report it"
+    }
 }
 
 fn radio(is_current: bool) -> Radio {

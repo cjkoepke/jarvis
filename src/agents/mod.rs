@@ -7,6 +7,7 @@ mod codex_trust;
 pub mod hooks_file;
 pub mod skills;
 
+use crate::git::repo::Repo;
 use crate::paths::Env;
 use anyhow::{Context, Result};
 use serde_json::json;
@@ -16,6 +17,12 @@ use std::process::Command;
 pub struct ReviewModel {
     pub name: String,
     pub about: String,
+}
+
+pub struct ReviewRun<'a> {
+    pub standards_dir: &'a Path,
+    pub repo: &'a Repo,
+    pub model: Option<&'a str>,
 }
 
 pub enum Approval {
@@ -34,7 +41,11 @@ pub trait Agent: Sync {
 
     /// A headless run that cannot change files, reads the prompt on stdin and prints
     /// only its reply. It must be able to read `standards_dir`.
-    fn review_command(&self, standards_dir: &Path, model: Option<&str>) -> Command;
+    fn review_command(&self, run: &ReviewRun) -> Command;
+
+    /// The same run without its read-only limits, so the person's and the repository's
+    /// own agent settings decide whether it may edit files and commit them.
+    fn fixing_review_command(&self, run: &ReviewRun) -> Command;
 
     /// The models `jarvis settings` offers for the review. Any other name can be typed there.
     fn review_models(&self, env: &Env) -> Vec<ReviewModel>;

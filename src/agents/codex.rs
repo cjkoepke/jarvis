@@ -1,9 +1,24 @@
-use super::{codex_models, codex_trust, Agent, Approval, ReviewModel};
+use super::{codex_models, codex_trust, Agent, Approval, ReviewModel, ReviewRun};
 use crate::paths::Env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
+const READ_ONLY: &str = "read-only";
+const REACH_THE_SIGNING_AGENT: &str = "sandbox_workspace_write.network_access=true";
+const PROMPT_ON_STDIN: &str = "-";
+
 pub struct Codex;
+
+impl Codex {
+    fn headless_command(&self, run: &ReviewRun) -> Command {
+        let mut command = Command::new(self.executable_name());
+        command.args(["exec", "--skip-git-repo-check", "--ephemeral"]);
+        if let Some(model) = run.model {
+            command.args(["--model", model]);
+        }
+        command
+    }
+}
 
 impl Agent for Codex {
     fn id(&self) -> &'static str {
@@ -38,13 +53,21 @@ impl Agent for Codex {
         codex_trust::approval(self, env)
     }
 
-    fn review_command(&self, _standards_dir: &Path, model: Option<&str>) -> Command {
-        let mut command = Command::new(self.executable_name());
-        command.args(["exec", "--skip-git-repo-check", "--sandbox", "read-only", "--ephemeral"]);
-        if let Some(model) = model {
-            command.args(["--model", model]);
+    fn review_command(&self, run: &ReviewRun) -> Command {
+        let mut command = self.headless_command(run);
+        command.args(["--sandbox", READ_ONLY, PROMPT_ON_STDIN]);
+        command
+    }
+
+    fn fixing_review_command(&self, run: &ReviewRun) -> Command {
+        let mut command = self.headless_command(run);
+        for git_dir in &run.repo.git_dirs {
+            command.arg("--add-dir").arg(git_dir);
         }
-        command.arg("-");
+        if run.repo.signs_commits {
+            command.args(["--config", REACH_THE_SIGNING_AGENT]);
+        }
+        command.arg(PROMPT_ON_STDIN);
         command
     }
 }

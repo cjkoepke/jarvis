@@ -1,5 +1,6 @@
 pub mod hook_config;
 pub mod outgoing;
+pub mod repo;
 
 use anyhow::{bail, Context, Result};
 use std::process::Command;

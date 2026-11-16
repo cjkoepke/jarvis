@@ -6,12 +6,13 @@ use crate::paths::Env;
 use crate::record::InstallRecord;
 use crate::standards::Standards;
 use crate::ui::{message, Tone};
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 const DEFAULT_STANDARDS: &str = "standards";
+const STANDARDS_BUILT_FROM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/standards");
 
 pub fn run(env: &Env, args: &InstallArgs) -> Result<ExitCode> {
     let previous = InstallRecord::load(env);
@@ -22,7 +23,8 @@ pub fn run(env: &Env, args: &InstallArgs) -> Result<ExitCode> {
     message::done(
         "standards",
         &format!(
-            "copied to {} ({} skills)",
+            "copied from {} to {} ({} skills)",
+            source.display(),
             env.installed_standards_dir().display(),
             standards.skills.len()
         ),
@@ -48,15 +50,19 @@ pub fn run(env: &Env, args: &InstallArgs) -> Result<ExitCode> {
 }
 
 fn standards_source(args: &InstallArgs, previous: Option<&InstallRecord>) -> Result<PathBuf> {
+    if let Some(named) = &args.standards {
+        return named
+            .canonicalize()
+            .with_context(|| format!("the standards folder {} does not exist", named.display()));
+    }
     let previous_source = previous.map(|record| record.standards_source.clone());
-    let source = args
-        .standards
-        .clone()
-        .or(previous_source)
-        .unwrap_or_else(|| PathBuf::from(DEFAULT_STANDARDS));
-    source
-        .canonicalize()
-        .with_context(|| format!("the standards folder {} does not exist", source.display()))
+    let fallbacks = [PathBuf::from(STANDARDS_BUILT_FROM), PathBuf::from(DEFAULT_STANDARDS)];
+    let candidates: Vec<PathBuf> = previous_source.into_iter().chain(fallbacks).collect();
+    let Some(source) = candidates.iter().find(|folder| folder.is_dir()) else {
+        let tried: Vec<String> = candidates.iter().map(|folder| folder.display().to_string()).collect();
+        bail!("no standards folder at {}; pass `--standards <folder>`", tried.join(", "));
+    };
+    Ok(source.canonicalize()?)
 }
 
 fn agent_ids<'a>(args: &'a InstallArgs, previous: Option<&'a InstallRecord>) -> &'a [String] {

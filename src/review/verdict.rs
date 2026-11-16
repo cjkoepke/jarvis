@@ -1,9 +1,11 @@
 const PASS: &str = "VERDICT: PASS";
+const FIXED: &str = "VERDICT: FIXED";
 const FAIL: &str = "VERDICT: FAIL";
 
 #[derive(Debug, PartialEq)]
 pub enum Verdict {
     Pass,
+    Fixed,
     Fail,
 }
 
@@ -17,6 +19,8 @@ pub fn parse(reply: &str) -> Option<Review> {
     let (findings, last_line) = reply.rsplit_once('\n').unwrap_or(("", reply));
     let verdict = if last_line.contains(PASS) {
         Verdict::Pass
+    } else if last_line.contains(FIXED) {
+        Verdict::Fixed
     } else if last_line.contains(FAIL) {
         Verdict::Fail
     } else {
@@ -39,6 +43,7 @@ mod tests {
         assert_eq!(failed.findings, "src/a.rs:3 explains the code");
 
         assert_eq!(parse("VERDICT: PASS").unwrap().verdict, Verdict::Pass);
+        assert_eq!(parse("src/a.rs:3 reworded\nVERDICT: FIXED").unwrap().verdict, Verdict::Fixed);
         assert!(parse("VERDICT: PASS\nbut on reflection there is a problem").is_none());
         assert!(parse("").is_none());
     }

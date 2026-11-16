@@ -36,7 +36,9 @@ try it from an agent session.
   `SessionStart` and `SubagentStart` hooks for Claude Code and Codex, copies
   the skills to where each agent looks for them, and adds a `pre-push` hook to
   the global git config (Git 2.54 or newer). A bare `jarvis install` reuses the
-  standards folder and agents of the last install.
+  standards folder and agents of the last install. When that folder is gone it
+  falls back to the `standards/` of the checkout the binary was built from,
+  then to `./standards`.
 - **`hook`** is what the agent hooks run. It replies with the core.
 - **`pre-push`** is what the git hook runs. It starts the headless agent the
   settings name with the `review` skill. Claude Code may only read files and
@@ -44,7 +46,10 @@ try it from an agent session.
   read-only sandbox. Violations refuse the push and are printed to the caller,
   so an agent that ran `git push` reads them as the command's output. A push
   is reviewed once: after a refusal the next attempt goes out without a review,
-  and the push after that is reviewed again.
+  and the push after that is reviewed again. With `review.fix` on, the
+  reviewer fixes what it finds and commits the fixes on top, where the
+  repository's agent settings let it; that push is still refused, and the next
+  attempt sends them.
 - **`status`** shows checks on the standards, each agent's hooks and skills,
   the git hook and the reviewer. `--format json` prints the same for an agent.
   It only reports, and each failed row says how to fix it.
@@ -59,6 +64,8 @@ try it from an agent session.
   push through.
 - `install` and `uninstall` leave configuration they did not write alone.
 - Every path hangs off `Env::home`, so `--home` moves a whole install.
+- Claude Code and Codex stay at parity. A capability added for one agent is
+  added for the other in the same change.
 - Nothing is ever written to the standards source folder. A machine that got
   jarvis as a binary does not have one.
 
@@ -89,6 +96,44 @@ try it from an agent session.
   ref still has that tip, and the record is dropped as soon as a push is let
   through. So the pass is spent once and cannot outlive a push, even one made
   from another clone.
+- **Fixing reviewer.** A pre-push hook cannot change which commits its push
+  sends, so a push the reviewer fixed is refused like any other and the fix
+  rides on the one unreviewed push that follows. The reviewer commits on
+  `HEAD`, so it only fixes a push of a single ref that moves with `HEAD`, the
+  checked-out branch or `HEAD` itself, with no uncommitted edits to tracked
+  files; any other push gets the read-only review. `VERDICT: FIXED` is
+  only believed when `HEAD` gained commits on top of the pushed one.
+- **Fixing permissions.** jarvis grants a fixing reviewer nothing. The
+  permission to edit and commit comes from each agent's own settings for the
+  repository, so each repository decides what its reviewer may do. Both agents
+  only honour those once the person has trusted the repository in that agent.
+  Where nothing grants the permission, every edit is denied and the reviewer
+  reports its findings like a read-only one.
+- **Fixing run, Claude Code.** It drops the read-only run's `--tools` limit.
+  `--safe-mode` keeps `CLAUDE.md`, skills and hooks out of the review, but
+  permission settings still apply and `--permission-prompts none` denies what
+  they do not allow. Claude Code denies a `git` command that follows a `cd`,
+  so `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR` keeps the reviewer's shell in
+  the repository.
+- **Fixing run, Codex.** It drops the read-only run's `--sandbox read-only`,
+  so Codex picks the sandbox: `workspace-write` in a repository the person
+  trusted, read-only in any other, whose `.codex/config.toml` it ignores.
+  `workspace-write` keeps `.git` read-only, so the repository's git folders
+  are passed with `--add-dir`; a linked worktree has two. A signing agent is
+  reached over a socket, which the sandbox counts as network, so network
+  access is switched on only when `commit.gpgsign` is set. Neither has any
+  effect in a read-only sandbox.
+- **Signing a fix.** A sandboxed reviewer can reach a running gpg-agent but
+  cannot start one, so jarvis starts it before a fixing run when the
+  repository signs commits with GPG. A locked key is then unlocked through the
+  agent's own pinentry. A reviewer has no terminal, so a pinentry that needs
+  one fails; the reviewer then undoes its edit and the push is refused for the
+  pusher to fix.
+- **`printenv` takes one name.** macOS `printenv` prints only the first
+  variable it is given, so the review skill reads each on its own line.
+- **Standards the binary was built from.** Cargo bakes the checkout path in at
+  compile time. A binary that has left its checkout behind skips that folder
+  like any other that is gone.
 - **Hook files.** jarvis hooks are matched loosely, not on the exact command,
   so hooks written by a binary at an older path are still replaced. A hook file
   that is not a JSON object is an error: jarvis never overwrites configuration
@@ -114,6 +159,7 @@ removes.
 | --- | --- |
 | `review.agent` | The agent that reviews every push: `claude` (the default) or `codex`. |
 | `review.model` | The model it reviews on. Without one, the agent's own default. |
+| `review.fix` | Whether the reviewer fixes what it finds and commits it, in repositories that [let it](#letting-the-reviewer-fix). `false` by default. |
 
 `jarvis settings` offers the models each agent shows in its own `/model`
 picker. Both lists are read the same way, from the catalog the agent keeps on
@@ -127,6 +173,36 @@ disk for the signed-in account, so neither goes stale:
 Without a readable catalog the list is empty and a name can still be typed.
 Switching the reviewer drops the model, because a model name belongs to one
 agent and would fail the other's run.
+
+### Letting the reviewer fix
+
+`review.fix` only asks for fixes. Each agent's own settings for a repository
+allow them, and those apply to every session of that agent there, not only to
+the review.
+
+Claude Code needs the repository trusted and these rules in its
+`.claude/settings.json`:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Edit(/**)",
+      "Bash(sed *)",
+      "Bash(git status *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git restore *)"
+    ]
+  }
+}
+```
+
+`Edit(/**)` covers every tool that writes files and stops at the repository's
+edge, which also bounds `sed -i`.
+
+Codex only needs the repository trusted, which `codex exec --trust` or the
+prompt of an interactive session records in `~/.codex/config.toml`.
 
 ## Standards folder
 
@@ -158,9 +234,10 @@ jarvis sets for the review:
 | `JARVIS_PUSH_REMOTE` | The remote being pushed to. |
 | `JARVIS_PUSH_COMMITS` | The tip of each pushed ref the remote lacks, separated by spaces. |
 | `JARVIS_STANDARDS` | The installed standards folder, holding `core/` and `skills/`. |
+| `JARVIS_REVIEW_FIX` | `true` when the reviewer may fix what it finds and commit, `false` otherwise. |
 
-The review skill must ask for a last line of `VERDICT: PASS` or
-`VERDICT: FAIL`. jarvis reads only that line.
+The review skill must ask for a last line of `VERDICT: PASS`, `VERDICT: FIXED`
+or `VERDICT: FAIL`. jarvis reads only that line.
 
 ## Source layout
 
@@ -171,8 +248,8 @@ The review skill must ask for a last line of `VERDICT: PASS` or
 | `src/agents/` | One file per agent and one per agent's model catalog, plus hook-file editing, skill copying and status checks. |
 | `src/check/` | The check type and its table and JSON output. |
 | `src/ui/` | The colour palette and styled messages every command prints through. `prompt/` holds the keyboard-driven picker and text input. |
-| `src/review/` | Running the reviewer and reading its verdict. |
-| `src/git/` | Git hook registration and finding the pushed commits the remote lacks. |
+| `src/review/` | Running the reviewer, reading its verdict, counting its fix commits and remembering refused pushes. |
+| `src/git/` | Git hook registration, finding the pushed commits the remote lacks, and what a fixing reviewer needs to know about the repository. |
 | `src/standards.rs` | Loading the standards folder. |
 | `src/settings.rs` | Reading and writing `~/.jarvis/settings.toml`. |
 | `tests/e2e.rs` | Whole-command tests in a throwaway home with a fake reviewer. |
@@ -186,8 +263,10 @@ To add a setting, add its field in `src/settings.rs` and a `Setting` variant in
 
 ## Not built yet
 
-- The reviewer only reports. It does not fix what it finds.
-- No repo bootstrap or sync.
+- The reviewer cannot fix a commit message: it only adds commits.
+- `jarvis repo init`, to add the fixing permissions to a repository, and
+  `jarvis repo audit`, to flag a repository that lacks them.
+- No repo sync.
 - Codex delivery only works once the hooks are approved with `/hooks`. Until
   then Codex skips them and sessions start without the standards.
 - `status` cannot tell when Codex wants a changed hook approved again; it still

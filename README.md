@@ -19,7 +19,8 @@ one folder and makes them count everywhere.
 - **A review before every push.** An agent reads your outgoing commits against
   the same standards. If something breaks them, the push is refused and the
   agent that pushed reads why, fixes it and pushes again. A push is only ever
-  reviewed once, so the fix goes straight out.
+  reviewed once, so the fix goes straight out. The reviewer can also make the
+  fix itself, in repositories whose agent settings let it.
 - **Out of your way.** Launch agents however you like. A review that cannot run
   never blocks a push, and `uninstall` puts everything back as it was.
 
@@ -34,7 +35,7 @@ jarvis install --standards ./standards
 | --- | --- |
 | `jarvis install` | Sets up your agents and the push review from a standards folder. |
 | `jarvis status` | Shows what is in place and how to fix what is not. |
-| `jarvis settings` | Picks the reviewer and its model with the arrow keys. |
+| `jarvis settings` | Picks the reviewer, its model and whether it fixes what it finds, with the arrow keys. |
 | `jarvis uninstall` | Removes everything `install` added and nothing else. |
 
 It needs Git 2.54 or newer and Claude Code or Codex. Codex asks you to approve
@@ -49,9 +50,6 @@ A standards folder has two parts:
 
 The `standards/` folder in this repository is a working example to start from.
 
-## Status
-
-jarvis is an early proof of concept. The reviewer reports what it finds and
-does not fix it yet.
+## Contributing
 
 Working on jarvis itself? See [AGENTS.md](AGENTS.md).

@@ -10,6 +10,11 @@ const FAKE_REVIEWER: &str = r#"#!/bin/sh
 dir="$(dirname "$0")"
 cat > "$dir/prompt"
 git log --format=%H $JARVIS_PUSH_COMMITS --not --remotes="$JARVIS_PUSH_REMOTE" > "$dir/commits"
+if [ -f "$dir/fix" ] && [ "$JARVIS_REVIEW_FIX" = true ]; then
+    mv "$dir/fix" fixed.rs
+    git add fixed.rs
+    git commit --quiet -m "fix: follow the standards"
+fi
 cat "$dir/reply"
 "#;
 
@@ -43,6 +48,10 @@ impl Sandbox {
 
     fn reviewer_replies(&self, reply: &str) {
         fs::write(self.fake_reviewer_dir().join("reply"), reply).unwrap();
+    }
+
+    fn reviewer_commits_a_fix(&self) {
+        fs::write(self.fake_reviewer_dir().join("fix"), "fn fixed() {}\n").unwrap();
     }
 
     fn prompt_given_to_reviewer(&self) -> String {
@@ -290,4 +299,74 @@ fn a_refusal_is_spent_by_any_push_of_that_ref_that_is_let_through() {
     fs::remove_file(&prompt).unwrap();
     assert!(!push_topic("HEAD:refs/heads/topic"));
     assert!(prompt.exists());
+}
+
+#[test]
+fn a_reviewer_allowed_to_fix_commits_on_top_and_the_next_push_sends_its_fix() {
+    let sandbox = Sandbox::new();
+    sandbox.install();
+    fs::write(sandbox.home.join(".jarvis/settings.toml"), "[review]\nfix = true\n").unwrap();
+    let repo = sandbox.repo_with_one_pushed_commit();
+    let last_pushed = sandbox.head(&repo);
+    sandbox.commit(&repo, "lib.rs", "fn main() {}\n");
+    let unfixed = sandbox.head(&repo);
+
+    sandbox.reviewer_commits_a_fix();
+    sandbox.reviewer_replies("lib.rs:1 fixed\nVERDICT: FIXED");
+    assert!(!sandbox.push(&repo).status.success());
+    assert_eq!(sandbox.remote_head(&repo), last_pushed);
+    assert_eq!(sandbox.git_output(&repo, &["rev-parse", "HEAD~1"]), unfixed);
+
+    assert!(sandbox.push(&repo).status.success());
+    assert_eq!(sandbox.remote_head(&repo), sandbox.head(&repo));
+}
+
+#[test]
+fn a_reviewer_does_not_fix_a_push_of_refs_its_commits_would_not_follow() {
+    let sandbox = Sandbox::new();
+    sandbox.install();
+    fs::write(sandbox.home.join(".jarvis/settings.toml"), "[review]\nfix = true\n").unwrap();
+    let repo = sandbox.repo_with_one_pushed_commit();
+    sandbox.commit(&repo, "lib.rs", "fn main() {}\n");
+    let unfixed = sandbox.head(&repo);
+    sandbox.git_output(&repo, &["branch", "topic"]);
+    sandbox.reviewer_commits_a_fix();
+    sandbox.reviewer_replies("lib.rs:1 breaks a standard\nVERDICT: FAIL");
+
+    for refs in [&["topic"][..], &["main", "main:refs/heads/other"]] {
+        assert!(!sandbox.git(&repo, &[&["push", "origin"], refs].concat()).status.success());
+        assert_eq!(sandbox.head(&repo), unfixed);
+    }
+}
+
+#[test]
+fn a_fixing_reviewer_finds_the_gpg_agent_started_when_the_repository_signs_commits() {
+    let sandbox = Sandbox::new();
+    sandbox.install();
+    fs::write(sandbox.home.join(".jarvis/settings.toml"), "[review]\nfix = true\n").unwrap();
+    let fake_gpgconf = sandbox.fake_reviewer_dir().join("gpgconf");
+    let gpgconf_args = sandbox.fake_reviewer_dir().join("gpgconf-args");
+    fs::write(&fake_gpgconf, "#!/bin/sh\necho \"$@\" > \"$(dirname \"$0\")/gpgconf-args\"\n").unwrap();
+    fs::set_permissions(&fake_gpgconf, fs::Permissions::from_mode(0o755)).unwrap();
+    let repo = sandbox.repo_with_one_pushed_commit();
+    sandbox.commit(&repo, "lib.rs", "fn main() {}\n");
+    sandbox.git_output(&repo, &["config", "commit.gpgsign", "true"]);
+
+    assert!(sandbox.push(&repo).status.success());
+    assert_eq!(fs::read_to_string(gpgconf_args).unwrap().trim(), "--launch gpg-agent");
+}
+
+#[test]
+fn install_falls_back_to_the_checkout_it_was_built_from_when_the_last_folder_is_gone() {
+    let sandbox = Sandbox::new();
+    let record_file = sandbox.home.join(".jarvis/install.json");
+    fs::create_dir_all(record_file.parent().unwrap()).unwrap();
+    fs::write(
+        &record_file,
+        r#"{ "standards_source": "/a/folder/that/is/gone", "agent_ids": ["claude"] }"#,
+    )
+    .unwrap();
+
+    assert!(sandbox.jarvis(&["install"]).status.success());
+    assert_eq!(read_json(&record_file)["standards_source"], STANDARDS);
 }

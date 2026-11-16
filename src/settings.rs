@@ -19,6 +19,8 @@ pub struct ReviewSettings {
     pub agent: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    #[serde(default)]
+    pub fix: bool,
 }
 
 impl Default for ReviewSettings {
@@ -26,6 +28,7 @@ impl Default for ReviewSettings {
         ReviewSettings {
             agent: default_review_agent(),
             model: None,
+            fix: false,
         }
     }
 }
