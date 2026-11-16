@@ -50,7 +50,7 @@ Before a push, jarvis says whether you may fix what you find:
 printenv JARVIS_REVIEW_FIX
 ```
 
-When it prints `true`, fix every violation you can. You may edit files in the repository with your file-editing tool or `sed`, and run `git status`, `git add`, `git commit` and `git restore`. Expect anything else to be denied, such as a `git` command that follows a `cd`.
+When it prints `true`, fix every violation you can. The repository's agent settings decide what you may do, so an edit or a command can be denied, as is a `git` command that follows a `cd`. A violation whose fix is denied stays unfixed.
 
 1. Edit the files, then commit the fixes the way the standards ask of any commit.
 2. Stage only the files you changed, by name.

@@ -43,8 +43,8 @@ pub trait Agent: Sync {
     /// only its reply. It must be able to read `standards_dir`.
     fn review_command(&self, run: &ReviewRun) -> Command;
 
-    /// The same run under the person's own permission settings, also allowed to edit
-    /// files in `repo` and commit them.
+    /// The same run without its read-only limits, so the person's and the repository's
+    /// own agent settings decide whether it may edit files and commit them.
     fn fixing_review_command(&self, run: &ReviewRun) -> Command;
 
     /// The models `jarvis settings` offers for the review. Any other name can be typed there.

@@ -6,26 +6,19 @@ use std::process::Command;
 const REVIEW_TOOLS: &str = "Read,Grep,Glob,Bash";
 const REVIEW_COMMANDS: [&str; 4] = ["Bash(git log *)", "Bash(git show *)", "Bash(git diff *)", "Bash(printenv *)"];
 
-const FIX_COMMANDS: [&str; 5] = [
-    "Bash(sed *)",
-    "Bash(git status *)",
-    "Bash(git add *)",
-    "Bash(git commit *)",
-    "Bash(git restore *)",
-];
 const STAY_IN_THE_REPO_VARIABLE: &str = "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR";
 
 pub struct Claude;
 
 impl Claude {
-    fn headless_command(&self, run: &ReviewRun, allowed: &[String]) -> Command {
+    fn headless_command(&self, run: &ReviewRun) -> Command {
         let mut command = Command::new(self.executable_name());
         command
             .args(["--print", "--safe-mode", "--no-session-persistence", "--permission-prompts", "none"])
             .arg("--add-dir")
             .arg(run.standards_dir)
             .arg("--allowedTools")
-            .args(allowed)
+            .args(REVIEW_COMMANDS)
             .env(STAY_IN_THE_REPO_VARIABLE, "1");
         if let Some(model) = run.model {
             command.args(["--model", model]);
@@ -64,19 +57,12 @@ impl Agent for Claude {
     }
 
     fn review_command(&self, run: &ReviewRun) -> Command {
-        let mut command = self.headless_command(run, &REVIEW_COMMANDS.map(String::from));
+        let mut command = self.headless_command(run);
         command.args(["--tools", REVIEW_TOOLS]);
         command
     }
 
     fn fixing_review_command(&self, run: &ReviewRun) -> Command {
-        let edits_in_the_repo = format!("Edit(/{}/**)", run.repo.dir.display());
-        let allowed: Vec<String> = REVIEW_COMMANDS
-            .iter()
-            .chain(&FIX_COMMANDS)
-            .map(|rule| rule.to_string())
-            .chain([edits_in_the_repo])
-            .collect();
-        self.headless_command(run, &allowed)
+        self.headless_command(run)
     }
 }

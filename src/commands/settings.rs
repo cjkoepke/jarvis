@@ -163,7 +163,7 @@ fn choose_review_fix(screen: &mut Screen, review: &mut ReviewSettings) -> Result
     let choices = [false, true];
     let notes = [
         "the push is refused and whoever pushed fixes it",
-        "the reviewer commits the fix under your own agent permissions; you push again",
+        "the reviewer commits the fix where the repository's agent settings allow it; you push again",
     ];
     let rows = choices.iter().zip(notes).map(|(fix, note)| Row {
         label: fix_label(*fix).to_string(),

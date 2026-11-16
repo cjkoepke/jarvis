@@ -20,7 +20,7 @@ one folder and makes them count everywhere.
   the same standards. If something breaks them, the push is refused and the
   agent that pushed reads why, fixes it and pushes again. A push is only ever
   reviewed once, so the fix goes straight out. The reviewer can also make the
-  fix itself, under your own permission settings.
+  fix itself, in repositories whose agent settings let it.
 - **Out of your way.** Launch agents however you like. A review that cannot run
   never blocks a push, and `uninstall` puts everything back as it was.
 

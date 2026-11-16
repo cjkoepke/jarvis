@@ -47,8 +47,9 @@ try it from an agent session.
   so an agent that ran `git push` reads them as the command's output. A push
   is reviewed once: after a refusal the next attempt goes out without a review,
   and the push after that is reviewed again. With `review.fix` on, the
-  reviewer fixes what it finds and commits the fixes on top; that push is
-  still refused, and the next attempt sends them.
+  reviewer fixes what it finds and commits the fixes on top, where the
+  repository's agent settings let it; that push is still refused, and the next
+  attempt sends them.
 - **`status`** shows checks on the standards, each agent's hooks and skills,
   the git hook and the reviewer. `--format json` prints the same for an agent.
   It only reports, and each failed row says how to fix it.
@@ -102,22 +103,26 @@ try it from an agent session.
   checked-out branch or `HEAD` itself, with no uncommitted edits to tracked
   files; any other push gets the read-only review. `VERDICT: FIXED` is
   only believed when `HEAD` gained commits on top of the pushed one.
-- **Fixing permissions, Claude Code.** `--safe-mode` keeps the person's
-  `CLAUDE.md`, skills and hooks out of the review, but their permission
-  settings still apply. The fixing run adds only `Edit` inside the repository,
-  `sed`, and `git status`, `add`, `commit` and `restore`; `--permission-prompts none`
-  denies the rest. In a permission rule `//` starts a path at the filesystem
-  root, and an `Edit` rule covers every tool that writes files
-  (https://code.claude.com/docs/en/permissions). It also bounds `sed -i`, which
-  Claude Code denies on a file outside the repository. Claude Code denies a `git`
-  command that follows a `cd`, so `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR`
-  keeps the reviewer's shell in the repository.
-- **Fixing permissions, Codex.** The fixing run swaps the read-only sandbox
-  for `workspace-write`, with the person's `config.toml` still loaded. That
-  sandbox keeps `.git` read-only, so the repository's git folders are passed
-  with `--add-dir`; a linked worktree has two. A signing agent is reached over
-  a socket, which the sandbox counts as network, so network access is switched
-  on only when `commit.gpgsign` is set.
+- **Fixing permissions.** jarvis grants a fixing reviewer nothing. The
+  permission to edit and commit comes from each agent's own settings for the
+  repository, so each repository decides what its reviewer may do. Both agents
+  only honour those once the person has trusted the repository in that agent.
+  Where nothing grants the permission, every edit is denied and the reviewer
+  reports its findings like a read-only one.
+- **Fixing run, Claude Code.** It drops the read-only run's `--tools` limit.
+  `--safe-mode` keeps `CLAUDE.md`, skills and hooks out of the review, but
+  permission settings still apply and `--permission-prompts none` denies what
+  they do not allow. Claude Code denies a `git` command that follows a `cd`,
+  so `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR` keeps the reviewer's shell in
+  the repository.
+- **Fixing run, Codex.** It drops the read-only run's `--sandbox read-only`,
+  so Codex picks the sandbox: `workspace-write` in a repository the person
+  trusted, read-only in any other, whose `.codex/config.toml` it ignores.
+  `workspace-write` keeps `.git` read-only, so the repository's git folders
+  are passed with `--add-dir`; a linked worktree has two. A signing agent is
+  reached over a socket, which the sandbox counts as network, so network
+  access is switched on only when `commit.gpgsign` is set. Neither has any
+  effect in a read-only sandbox.
 - **Signing a fix.** A sandboxed reviewer can reach a running gpg-agent but
   cannot start one, so jarvis starts it before a fixing run when the
   repository signs commits with GPG. A locked key is then unlocked through the
@@ -154,7 +159,7 @@ removes.
 | --- | --- |
 | `review.agent` | The agent that reviews every push: `claude` (the default) or `codex`. |
 | `review.model` | The model it reviews on. Without one, the agent's own default. |
-| `review.fix` | Whether the reviewer fixes what it finds and commits it. `false` by default. |
+| `review.fix` | Whether the reviewer fixes what it finds and commits it, in repositories that [let it](#letting-the-reviewer-fix). `false` by default. |
 
 `jarvis settings` offers the models each agent shows in its own `/model`
 picker. Both lists are read the same way, from the catalog the agent keeps on
@@ -168,6 +173,36 @@ disk for the signed-in account, so neither goes stale:
 Without a readable catalog the list is empty and a name can still be typed.
 Switching the reviewer drops the model, because a model name belongs to one
 agent and would fail the other's run.
+
+### Letting the reviewer fix
+
+`review.fix` only asks for fixes. Each agent's own settings for a repository
+allow them, and those apply to every session of that agent there, not only to
+the review.
+
+Claude Code needs the repository trusted and these rules in its
+`.claude/settings.json`:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Edit(/**)",
+      "Bash(sed *)",
+      "Bash(git status *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git restore *)"
+    ]
+  }
+}
+```
+
+`Edit(/**)` covers every tool that writes files and stops at the repository's
+edge, which also bounds `sed -i`.
+
+Codex only needs the repository trusted, which `codex exec --trust` or the
+prompt of an interactive session records in `~/.codex/config.toml`.
 
 ## Standards folder
 
@@ -229,7 +264,9 @@ To add a setting, add its field in `src/settings.rs` and a `Setting` variant in
 ## Not built yet
 
 - The reviewer cannot fix a commit message: it only adds commits.
-- No repo bootstrap or sync.
+- `jarvis repo init`, to add the fixing permissions to a repository, and
+  `jarvis repo audit`, to flag a repository that lacks them.
+- No repo sync.
 - Codex delivery only works once the hooks are approved with `/hooks`. Until
   then Codex skips them and sessions start without the standards.
 - `status` cannot tell when Codex wants a changed hook approved again; it still
