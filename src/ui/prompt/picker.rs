@@ -1,5 +1,5 @@
 use super::screen::{Key, Screen};
-use super::{footer, heading, Answer};
+use super::{footer, heading, row_line, Answer, RowLine};
 use crate::ui::Tone;
 use anyhow::Result;
 
@@ -44,16 +44,17 @@ impl Picker<'_> {
     fn lines(&self) -> Vec<String> {
         let label_width = self.rows.iter().map(|row| row.label.chars().count()).max().unwrap_or(0);
         let rows = self.rows.iter().enumerate().map(|(index, row)| {
-            let under_cursor = index == self.cursor;
-            let pointer = if under_cursor { Tone::Good.paint("❯") } else { " ".to_string() };
             let radio = match row.radio {
                 Radio::Absent => String::new(),
                 Radio::Filled => format!("{} ", Tone::Good.paint("●")),
                 Radio::Empty => format!("{} ", Tone::Muted.paint("○")),
             };
-            let label = format!("{:<label_width$}", row.label);
-            let label = if under_cursor { Tone::Strong.paint(&label) } else { label };
-            format!("{pointer} {radio}{label}   {}", Tone::Muted.paint(&row.note))
+            row_line(RowLine {
+                under_cursor: index == self.cursor,
+                mark: &radio,
+                label: &format!("{:<label_width$}", row.label),
+                note: &row.note,
+            })
         });
 
         let mut lines = heading(self.title, self.subtitle);

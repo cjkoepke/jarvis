@@ -25,10 +25,13 @@ target/debug/jarvis --home /tmp/jarvis-home uninstall
 
 Without `--home`, `install` and `uninstall` act on the real home directory:
 `~/.claude/settings.json`, `~/.claude/skills`, `~/.codex/hooks.json`,
-`~/.agents/skills`, `~/.gitconfig` and `~/.jarvis`.
+`~/.agents/skills`, `~/.gitconfig` and `~/.jarvis`. `repo init` writes
+`~/.claude.json`, `~/.codex/config.toml` and the `.claude/settings.json` of the
+repository it is run in, so try it in a throwaway repository as well.
 
-`jarvis settings` needs a terminal, so drive it through a pseudo-terminal to
-try it from an agent session.
+`jarvis settings` needs a terminal, and so do the questions `repo init` and
+`repo audit` ask, so drive them through a pseudo-terminal to try them from an
+agent session.
 
 ## What each command does
 
@@ -55,7 +58,23 @@ try it from an agent session.
   It only reports, and each failed row says how to fix it.
 - **`settings`** opens a keyboard-driven screen for the machine's defaults and
   saves each change as it is made.
-- **`uninstall`** removes everything `install` added and nothing else.
+- **`repo init`** readies the checkout it is run in for a fixing reviewer. For
+  each installed agent, and for the reviewer when it is not one of them, it
+  records that the repository is trusted. For Claude Code it also adds the
+  [permission rules](#letting-the-reviewer-fix) to the repository's
+  `.claude/settings.json`. Where an agent does not trust the repository yet,
+  it asks first, and a no changes nothing. `--yes` answers for a run without a
+  terminal, which otherwise stops there. Running it again changes nothing, and
+  it fails when something is still missing afterwards.
+- **`repo audit`** checks what `repo init` sets up: whether each of those
+  agents trusts the repository, whether its rules allow editing and
+  committing, and whether `review.fix` is on. It takes `--format json` and
+  fails when a check does. In a terminal it then offers the fixes jarvis can
+  make as a list to tick, the failed ones ticked already, and shows the checks
+  again after making them. Without a terminal, and with `--format json`, it
+  only reports.
+- **`uninstall`** removes everything `install` added and nothing else. What
+  `repo init` wrote stays: those are each agent's own settings for a repository.
 
 ## Rules that must hold
 
@@ -103,12 +122,41 @@ try it from an agent session.
   checked-out branch or `HEAD` itself, with no uncommitted edits to tracked
   files; any other push gets the read-only review. `VERDICT: FIXED` is
   only believed when `HEAD` gained commits on top of the pushed one.
-- **Fixing permissions.** jarvis grants a fixing reviewer nothing. The
+- **Fixing permissions.** A review grants a fixing reviewer nothing. The
   permission to edit and commit comes from each agent's own settings for the
   repository, so each repository decides what its reviewer may do. Both agents
   only honour those once the person has trusted the repository in that agent.
   Where nothing grants the permission, every edit is denied and the reviewer
-  reports its findings like a read-only one.
+  reports its findings like a read-only one. `repo init` writes those settings,
+  and only when a person runs it in the repository.
+- **Requirements.** A `Requirement` pairs a check with the remedy jarvis has
+  for it, if any. `repo init` applies the remedies of the failed checks and
+  `repo audit` offers them, so the two can never disagree about what is
+  missing or how it is put right.
+- **Asking before trusting.** Trust lets a repository's own settings, hooks
+  and tools run in every session of an agent there, so jarvis only records it
+  on a yes: the answer to `repo init`, its `--yes`, or a ticked line in
+  `repo audit`.
+- **Repository trust.** Neither agent has a command that records trust without
+  a session, so `repo init` writes what the agent's own prompt would. Both
+  look the trust up under the exact folder: a trusted parent folder does not
+  count, and a linked worktree takes the trust of the checkout it was added
+  from. `Repo` works out both folders.
+- **Trust, Claude Code.** It is `projects.<folder>.hasTrustDialogAccepted` in
+  `~/.claude.json`
+  (https://code.claude.com/docs/en/permissions). Without it Claude Code drops
+  the `permissions.allow` of the repository's `.claude/settings.json`, also in
+  a `--print` run. A running session saves that file under a lock, a folder
+  named `.claude.json.lock`, and by renaming a finished copy over it. jarvis
+  does the same, so neither loses the other's change.
+- **Trust, Codex.** It is `trust_level = "trusted"` under
+  `[projects."<folder>"]` in `~/.codex/config.toml`. Codex asks about the
+  checkout first and the main checkout second, and the first that has an entry
+  decides, even one without a trust level. A folder marked `untrusted` is the
+  person's decision, which `repo init` leaves alone and `repo audit` reports.
+  The file is edited with `toml_edit`, which keeps its comments and order, and
+  no second header is ever added for a folder: a duplicate, or any other trust
+  level, stops Codex from starting.
 - **Fixing run, Claude Code.** It drops the read-only run's `--tools` limit.
   `--safe-mode` keeps `CLAUDE.md`, skills and hooks out of the review, but
   permission settings still apply and `--permission-prompts none` denies what
@@ -116,8 +164,10 @@ try it from an agent session.
   so `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR` keeps the reviewer's shell in
   the repository.
 - **Fixing run, Codex.** It drops the read-only run's `--sandbox read-only`,
-  so Codex picks the sandbox: `workspace-write` in a repository the person
-  trusted, read-only in any other, whose `.codex/config.toml` it ignores.
+  so Codex picks the sandbox, which is `workspace-write` in a repository the
+  person trusted. Codex picks the same for a repository marked `untrusted`, so
+  jarvis only starts this run where the repository is trusted and keeps the
+  read-only one everywhere else.
   `workspace-write` keeps `.git` read-only, so the repository's git folders
   are passed with `--add-dir`; a linked worktree has two. A signing agent is
   reached over a socket, which the sandbox counts as network, so network
@@ -198,11 +248,19 @@ Claude Code needs the repository trusted and these rules in its
 }
 ```
 
-`Edit(/**)` covers every tool that writes files and stops at the repository's
-edge, which also bounds `sed -i`.
+`Edit(/**)` covers every tool that writes files and stops at the folder the
+reviewer starts in, which also bounds `sed -i`. Git starts a hook in the top
+folder of the checkout, so that is the repository's edge.
 
-Codex only needs the repository trusted, which `codex exec --trust` or the
-prompt of an interactive session records in `~/.codex/config.toml`.
+Codex only needs the repository trusted.
+
+`jarvis repo init` sets all of this up for the repository it is run in, and
+`jarvis repo audit` shows what is missing. Claude Code reads the rules from the
+checkout the push comes from, so other worktrees only get them once
+`.claude/settings.json` is committed, and another clone needs its own
+`repo init` as well. Where that file is tracked, commit the change `repo init`
+made: the reviewer does not fix a push while tracked files have uncommitted
+edits.
 
 ## Standards folder
 
@@ -244,19 +302,19 @@ or `VERDICT: FAIL`. jarvis reads only that line.
 | Path | Holds |
 | --- | --- |
 | `src/cli.rs` | Command-line definition. |
-| `src/commands/` | One file per command: `install`, `uninstall`, `status`, `settings`, `hook`, `pre_push`. |
-| `src/agents/` | One file per agent and one per agent's model catalog, plus hook-file editing, skill copying and status checks. |
-| `src/check/` | The check type and its table and JSON output. |
-| `src/ui/` | The colour palette and styled messages every command prints through. `prompt/` holds the keyboard-driven picker and text input. |
+| `src/commands/` | One file per command: `install`, `uninstall`, `status`, `settings`, `hook`, `pre_push`. `repo/` holds `init` and `audit`. |
+| `src/agents/` | One file per agent, one per agent's model catalog and one per agent's settings for a repository, plus hook-file editing, skill copying and status checks. |
+| `src/check/` | The check type, its table and JSON output, the report `status` and `repo audit` print, and a check paired with its remedy. |
+| `src/ui/` | The colour palette and styled messages every command prints through. `prompt/` holds the keyboard-driven picker, checklist and text input. |
 | `src/review/` | Running the reviewer, reading its verdict, counting its fix commits and remembering refused pushes. |
-| `src/git/` | Git hook registration, finding the pushed commits the remote lacks, and what a fixing reviewer needs to know about the repository. |
+| `src/git/` | Git hook registration, finding the pushed commits the remote lacks, and what an agent working in the repository needs to know about it. |
 | `src/standards.rs` | Loading the standards folder. |
 | `src/settings.rs` | Reading and writing `~/.jarvis/settings.toml`. |
 | `tests/e2e.rs` | Whole-command tests in a throwaway home with a fake reviewer. |
 
 To support another agent, add a file in `src/agents/` that implements `Agent`
-and list it in `all()`. Hook registration, skills, status checks and the review
-need no changes.
+and list it in `all()`. Hook registration, skills, status checks, the review
+and the `repo` commands need no changes.
 
 To add a setting, add its field in `src/settings.rs` and a `Setting` variant in
 `src/commands/settings.rs`.
@@ -264,8 +322,12 @@ To add a setting, add its field in `src/settings.rs` and a `Setting` variant in
 ## Not built yet
 
 - The reviewer cannot fix a commit message: it only adds commits.
-- `jarvis repo init`, to add the fixing permissions to a repository, and
-  `jarvis repo audit`, to flag a repository that lacks them.
+- `repo audit` compares rules by their spelling, so it asks for the ones
+  `repo init` writes even where a broader rule already allows the same. It
+  does not look for what would still stop a fix: a Claude Code `deny` rule, or
+  a Codex `sandbox_mode` set in a config file.
+- `CLAUDE_CONFIG_DIR` and `CODEX_HOME` are not followed. jarvis reads and
+  writes each agent's files under the home folder only.
 - No repo sync.
 - Codex delivery only works once the hooks are approved with `/hooks`. Until
   then Codex skips them and sessions start without the standards.

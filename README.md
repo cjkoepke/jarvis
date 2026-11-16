@@ -22,7 +22,7 @@ one folder and makes them count everywhere.
   reviewed once, so the fix goes straight out. The reviewer can also make the
   fix itself, in repositories whose agent settings let it.
 - **Out of your way.** Launch agents however you like. A review that cannot run
-  never blocks a push, and `uninstall` puts everything back as it was.
+  never blocks a push, and `uninstall` removes everything `install` added.
 
 ## Get started
 
@@ -36,6 +36,8 @@ jarvis install --standards ./standards
 | `jarvis install` | Sets up your agents and the push review from a standards folder. |
 | `jarvis status` | Shows what is in place and how to fix what is not. |
 | `jarvis settings` | Picks the reviewer, its model and whether it fixes what it finds, with the arrow keys. |
+| `jarvis repo init` | Lets the reviewer fix in the repository you are in. It asks before it trusts the repository in each agent, then adds the rules to edit and commit. Both apply to every session of those agents there. |
+| `jarvis repo audit` | Shows whether the reviewer may fix there, and offers to put right what is missing, one tick per fix. |
 | `jarvis uninstall` | Removes everything `install` added and nothing else. |
 
 It needs Git 2.54 or newer and Claude Code or Codex. Codex asks you to approve

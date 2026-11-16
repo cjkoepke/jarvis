@@ -8,7 +8,6 @@ use crate::record::InstallRecord;
 use crate::review::reviewer;
 use crate::settings::Settings;
 use crate::standards::{Standards, CORE_MAX_CHARS};
-use crate::ui::{message, Tone};
 use anyhow::Result;
 use std::process::ExitCode;
 
@@ -30,19 +29,7 @@ const GIT_REVIEWER: CheckSubject = CheckSubject {
 };
 
 pub fn run(env: &Env, format: Format) -> Result<ExitCode> {
-    let checks = gather(env);
-    match format {
-        Format::Table => {
-            anstream::println!("{}", check::table::render(&checks));
-            print_summary(&checks);
-        }
-        Format::Json => println!("{}", check::json::render(&checks)?),
-    }
-    Ok(if check::is_healthy(&checks) {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::FAILURE
-    })
+    check::report::print(&gather(env), format)
 }
 
 fn gather(env: &Env) -> Vec<Check> {
@@ -64,21 +51,6 @@ fn gather(env: &Env) -> Vec<Check> {
         checks.push(git_reviewer_check(env, standards));
     }
     checks
-}
-
-fn print_summary(checks: &[Check]) {
-    let tally = check::tally(checks);
-    if tally.failed > 0 {
-        let text = format!(
-            "✗ {} failed, {} passed. Each failed row says how to fix it.",
-            tally.failed, tally.passed
-        );
-        message::summary(Tone::Bad, &text);
-    } else if tally.warnings > 0 {
-        message::summary(Tone::Caution, &format!("! {} passed, {} to look at.", tally.passed, tally.warnings));
-    } else {
-        message::summary(Tone::Good, &format!("✓ All {} checks passed.", tally.passed));
-    }
 }
 
 fn standards_check(env: &Env, record: &InstallRecord, standards: &Standards) -> Check {

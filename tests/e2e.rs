@@ -77,19 +77,29 @@ impl Sandbox {
             .unwrap()
     }
 
+    fn jarvis_in(&self, repo: &Path, args: &[&str]) -> Output {
+        let mut jarvis = Command::new(env!("CARGO_BIN_EXE_jarvis"));
+        jarvis.current_dir(repo).arg("--home").arg(&self.home).args(args);
+        self.with_only_the_sandbox_git_config(&mut jarvis).output().unwrap()
+    }
+
+    fn with_only_the_sandbox_git_config<'a>(&self, command: &'a mut Command) -> &'a mut Command {
+        command
+            .env("HOME", &self.home)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env_remove("XDG_CONFIG_HOME")
+            .env_remove("GIT_CONFIG_GLOBAL")
+    }
+
     fn install(&self) {
         assert!(self.jarvis(&["install", "--standards", STANDARDS]).status.success());
     }
 
     fn git(&self, cwd: &Path, args: &[&str]) -> Output {
-        Command::new("git")
-            .current_dir(cwd)
-            .args(args)
-            .env("HOME", &self.home)
+        let mut git = Command::new("git");
+        git.current_dir(cwd).args(args);
+        self.with_only_the_sandbox_git_config(&mut git)
             .env("PATH", self.path_with_fake_reviewer_first())
-            .env("GIT_CONFIG_NOSYSTEM", "1")
-            .env_remove("XDG_CONFIG_HOME")
-            .env_remove("GIT_CONFIG_GLOBAL")
             .env("GIT_AUTHOR_NAME", "Test")
             .env("GIT_AUTHOR_EMAIL", "test@example.com")
             .env("GIT_COMMITTER_NAME", "Test")
@@ -369,4 +379,88 @@ fn install_falls_back_to_the_checkout_it_was_built_from_when_the_last_folder_is_
 
     assert!(sandbox.jarvis(&["install"]).status.success());
     assert_eq!(read_json(&record_file)["standards_source"], STANDARDS);
+}
+
+#[test]
+fn repo_init_only_trusts_a_repository_when_told_to_and_leaves_every_other_setting_alone() {
+    let sandbox = Sandbox::new();
+    sandbox.install();
+    let repo = sandbox.repo_with_one_pushed_commit();
+    let repo_folder = repo.to_str().unwrap();
+    let claude_trust = sandbox.home.join(".claude.json");
+    let codex_config = sandbox.home.join(".codex/config.toml");
+    let repo_settings = repo.join(".claude/settings.json");
+    let codex_config_before = "# mine\n[projects.\"/elsewhere\"]\ntrust_level = \"untrusted\"\n";
+    fs::create_dir_all(repo_settings.parent().unwrap()).unwrap();
+    fs::write(
+        &claude_trust,
+        r#"{"numStartups":3,"projects":{"/elsewhere":{"hasTrustDialogAccepted":false}}}"#,
+    )
+    .unwrap();
+    fs::write(&codex_config, codex_config_before).unwrap();
+    fs::write(
+        &repo_settings,
+        r#"{"permissions":{"allow":["Bash(ls *)","Bash(sed *)"],"deny":["Read(.env)"]}}"#,
+    )
+    .unwrap();
+
+    let files = [&claude_trust, &codex_config, &repo_settings];
+    let before_init = files.map(|file| fs::read(file).unwrap());
+    assert!(!sandbox.jarvis_in(&repo, &["repo", "audit"]).status.success());
+    assert!(!sandbox.jarvis_in(&repo, &["repo", "init"]).status.success());
+    assert_eq!(files.map(|file| fs::read(file).unwrap()), before_init);
+    assert!(sandbox.jarvis_in(&repo, &["repo", "init", "--yes"]).status.success());
+    assert!(sandbox.jarvis_in(&repo, &["repo", "audit"]).status.success());
+
+    let trust = read_json(&claude_trust);
+    assert_eq!(trust["numStartups"], 3);
+    assert_eq!(trust["projects"]["/elsewhere"]["hasTrustDialogAccepted"], false);
+    assert_eq!(trust["projects"][repo_folder]["hasTrustDialogAccepted"], true);
+    let settings = read_json(&repo_settings);
+    let allowed = settings["permissions"]["allow"].as_array().unwrap();
+    assert_eq!(allowed[0], "Bash(ls *)");
+    assert_eq!(allowed.iter().filter(|rule| *rule == "Bash(sed *)").count(), 1);
+    assert!(allowed.iter().any(|rule| rule == "Bash(git commit *)"));
+    assert_eq!(settings["permissions"]["deny"][0], "Read(.env)");
+    let codex = fs::read_to_string(&codex_config).unwrap();
+    assert!(codex.starts_with(codex_config_before));
+    assert!(codex.contains(&format!("[projects.\"{repo_folder}\"]\ntrust_level = \"trusted\"\n")));
+
+    let after_the_first_init = files.map(|file| fs::read(file).unwrap());
+    assert!(sandbox.jarvis_in(&repo, &["repo", "init"]).status.success());
+    assert_eq!(files.map(|file| fs::read(file).unwrap()), after_the_first_init);
+}
+
+#[test]
+fn codex_only_gets_a_run_that_can_fix_in_a_repository_it_trusts() {
+    let sandbox = Sandbox::new();
+    sandbox.install();
+    let repo = sandbox.repo_with_one_pushed_commit();
+    let codex = sandbox.fake_reviewer_dir().join("codex");
+    let codex_args = sandbox.fake_reviewer_dir().join("codex-args");
+    let codex_config = sandbox.home.join(".codex/config.toml");
+    let trust_level = |level: &str| format!("[projects.\"{}\"]\ntrust_level = \"{level}\"\n", repo.display());
+    fs::write(
+        &codex,
+        "#!/bin/sh\necho \"$@\" > \"$(dirname \"$0\")/codex-args\"\necho 'VERDICT: PASS'\n",
+    )
+    .unwrap();
+    fs::set_permissions(&codex, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(
+        sandbox.home.join(".jarvis/settings.toml"),
+        "[review]\nagent = \"codex\"\nfix = true\n",
+    )
+    .unwrap();
+
+    fs::write(&codex_config, trust_level("untrusted")).unwrap();
+    assert!(!sandbox.jarvis_in(&repo, &["repo", "init", "--yes"]).status.success());
+    assert_eq!(fs::read_to_string(&codex_config).unwrap(), trust_level("untrusted"));
+    sandbox.commit(&repo, "lib.rs", "fn main() {}\n");
+    assert!(sandbox.push(&repo).status.success());
+    assert!(fs::read_to_string(&codex_args).unwrap().contains("--sandbox read-only"));
+
+    fs::write(&codex_config, trust_level("trusted")).unwrap();
+    sandbox.commit(&repo, "more.rs", "fn more() {}\n");
+    assert!(sandbox.push(&repo).status.success());
+    assert!(!fs::read_to_string(&codex_args).unwrap().contains("--sandbox"));
 }

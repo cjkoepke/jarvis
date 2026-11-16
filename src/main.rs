@@ -38,6 +38,7 @@ fn main() -> ExitCode {
         Cmd::Uninstall => commands::uninstall::run(&env),
         Cmd::Status { format } => commands::status::run(&env, format),
         Cmd::Settings => commands::settings::run(&env),
+        Cmd::Repo { command } => commands::repo::run(&env, command),
         Cmd::Hook { agent, event } => Ok(commands::hook::run(&env, &agent, &event)),
         Cmd::PrePush { git_args } => Ok(commands::pre_push::run(&env, &git_args)),
     };

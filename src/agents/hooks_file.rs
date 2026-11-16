@@ -1,17 +1,16 @@
+use super::json_config::{self, Config};
 use super::{hook_command, hook_subcommand, Agent};
 use crate::paths::Env;
-use anyhow::{bail, Context, Result};
-use serde_json::{json, Map, Value};
+use anyhow::{Context, Result};
+use serde_json::{json, Value};
 use std::fs;
-use std::path::{Path, PathBuf};
-
-type Config = Map<String, Value>;
+use std::path::PathBuf;
 
 const TITLE: &str = "jarvis: working standards";
 
 pub fn register(agent: &dyn Agent, env: &Env) -> Result<()> {
     let path = agent.hooks_file(env);
-    let mut config = read(&path)?;
+    let mut config = json_config::read(&path)?;
     remove_jarvis_hooks(agent, &mut config);
 
     let hooks = config.entry("hooks").or_insert_with(|| json!({}));
@@ -26,7 +25,7 @@ pub fn register(agent: &dyn Agent, env: &Env) -> Result<()> {
         let handler = json!({ "type": "command", "command": hook_command(agent, env, event), "statusMessage": TITLE });
         groups.push(json!({ "hooks": [handler] }));
     }
-    write(&path, &config)
+    json_config::write(&path, &config)
 }
 
 pub fn unregister(agent: &dyn Agent, env: &Env) -> Result<()> {
@@ -34,14 +33,14 @@ pub fn unregister(agent: &dyn Agent, env: &Env) -> Result<()> {
     if !path.exists() {
         return Ok(());
     }
-    let mut config = read(&path)?;
+    let mut config = json_config::read(&path)?;
     if !remove_jarvis_hooks(agent, &mut config) {
         return Ok(());
     }
     if config.is_empty() {
         fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))
     } else {
-        write(&path, &config)
+        json_config::write(&path, &config)
     }
 }
 
@@ -53,7 +52,7 @@ pub struct RegisteredHook {
 }
 
 pub fn registered(agent: &dyn Agent, env: &Env) -> Vec<RegisteredHook> {
-    let config = read(&agent.hooks_file(env)).unwrap_or_default();
+    let config = json_config::read(&agent.hooks_file(env)).unwrap_or_default();
     let mut registered = Vec::new();
     for event in agent.context_events().iter().copied() {
         let subcommand = hook_subcommand(agent, event);
@@ -112,26 +111,4 @@ fn remove_jarvis_hooks(agent: &dyn Agent, config: &mut Config) -> bool {
         }
     }
     removed_any
-}
-
-fn read(path: &Path) -> Result<Config> {
-    if !path.exists() {
-        return Ok(Config::new());
-    }
-    let text = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    if text.trim().is_empty() {
-        return Ok(Config::new());
-    }
-    match serde_json::from_str(&text).with_context(|| format!("{} is not valid JSON", path.display()))? {
-        Value::Object(config) => Ok(config),
-        _ => bail!("{} does not hold a JSON object", path.display()),
-    }
-}
-
-fn write(path: &Path, config: &Config) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let text = serde_json::to_string_pretty(config)? + "\n";
-    fs::write(path, text).with_context(|| format!("writing {}", path.display()))
 }

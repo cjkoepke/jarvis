@@ -1,4 +1,6 @@
-use super::{claude_models, Agent, ReviewModel, ReviewRun};
+use super::{claude_models, claude_repo, Agent, ReviewModel, ReviewRun};
+use crate::check::requirement::Requirement;
+use crate::git::repo::Repo;
 use crate::paths::Env;
 use std::path::PathBuf;
 use std::process::Command;
@@ -64,5 +66,9 @@ impl Agent for Claude {
 
     fn fixing_review_command(&self, run: &ReviewRun) -> Command {
         self.headless_command(run)
+    }
+
+    fn fixing_requirements<'a>(&self, env: &'a Env, repo: &'a Repo) -> Vec<Requirement<'a>> {
+        claude_repo::fixing_requirements(self, env, repo)
     }
 }

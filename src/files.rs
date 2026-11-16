@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use tempfile::NamedTempFile;
 
 pub fn copy_dir(from: &Path, to: &Path) -> Result<()> {
     fs::create_dir_all(to).with_context(|| format!("creating {}", to.display()))?;
@@ -12,6 +14,31 @@ pub fn copy_dir(from: &Path, to: &Path) -> Result<()> {
             fs::copy(&entry, &destination).with_context(|| format!("copying to {}", destination.display()))?;
         }
     }
+    Ok(())
+}
+
+/// Swaps in the new contents in one step, so nothing ever reads the file half written.
+/// A symlink keeps pointing at the file it names, and that file keeps its permissions.
+pub fn replace(file: &Path, contents: &str) -> Result<()> {
+    let target = match file.canonicalize() {
+        Ok(target) => target,
+        Err(error) if file.is_symlink() => {
+            return Err(error).with_context(|| format!("resolving configuration symlink {}", file.display()));
+        }
+        Err(_) => file.to_path_buf(),
+    };
+    let dir = target.parent().with_context(|| format!("{} has no folder", target.display()))?;
+    fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
+
+    let mut replacement = NamedTempFile::new_in(dir).with_context(|| format!("writing next to {}", target.display()))?;
+    replacement.write_all(contents.as_bytes())?;
+    if let Ok(existing) = fs::metadata(&target) {
+        fs::set_permissions(replacement.path(), existing.permissions())?;
+    }
+    replacement.as_file().sync_all()?;
+    replacement
+        .persist(&target)
+        .with_context(|| format!("writing {}", target.display()))?;
     Ok(())
 }
 
@@ -63,4 +90,29 @@ fn relative_files(root: &Path) -> Result<Vec<PathBuf>> {
     }
     files.sort();
     Ok(files)
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::{symlink, PermissionsExt};
+
+    #[test]
+    fn replacement_preserves_configuration_symlinks_even_when_the_target_is_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("settings.json");
+        let link = dir.path().join("linked.json");
+        symlink(&target, &link).unwrap();
+
+        assert!(replace(&link, "{}").is_err());
+        assert_eq!(fs::read_link(&link).unwrap(), target);
+        assert!(!target.exists());
+
+        replace(&target, "old").unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o640)).unwrap();
+        replace(&link, "new").unwrap();
+        assert_eq!(fs::read_link(&link).unwrap(), target);
+        assert_eq!(fs::read_to_string(&target).unwrap(), "new");
+        assert_eq!(fs::metadata(&target).unwrap().permissions().mode() & 0o777, 0o640);
+    }
 }

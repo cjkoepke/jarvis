@@ -24,9 +24,13 @@ pub struct Screen {
 }
 
 impl Screen {
+    pub fn can_open() -> bool {
+        io::stdin().is_terminal() && io::stdout().is_terminal()
+    }
+
     pub fn open() -> Result<Screen> {
         let out = io::stdout();
-        if !io::stdin().is_terminal() || !out.is_terminal() {
+        if !Screen::can_open() {
             bail!("this is not an interactive terminal");
         }
         let colored = AutoStream::choice(&out) != ColorChoice::Never;
