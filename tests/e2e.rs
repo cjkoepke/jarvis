@@ -1,6 +1,6 @@
 use serde_json::Value;
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use tempfile::TempDir;
@@ -508,4 +508,34 @@ fn codex_only_gets_a_run_that_can_fix_in_a_repository_it_trusts() {
     sandbox.commit(&repo, "more.rs", "fn more() {}\n");
     assert!(sandbox.push(&repo).status.success());
     assert!(!fs::read_to_string(&codex_args).unwrap().contains("--sandbox"));
+}
+
+#[test]
+fn update_upgrades_through_homebrew_and_registers_the_path_that_outlasts_an_upgrade() {
+    let sandbox = Sandbox::new();
+    let homebrew = sandbox.home.join("homebrew");
+    let keg = homebrew.join("Cellar/jarvis/1.0.0");
+    let brew = homebrew.join("bin/brew");
+    let lasting_jarvis = homebrew.join("opt/jarvis/bin/jarvis");
+    for folder in [keg.join("bin"), homebrew.join("bin"), homebrew.join("opt")] {
+        fs::create_dir_all(folder).unwrap();
+    }
+    fs::copy(env!("CARGO_BIN_EXE_jarvis"), keg.join("bin/jarvis")).unwrap();
+    fs::write(keg.join("INSTALL_RECEIPT.json"), r#"{"source":{"tap":"someone/tap"}}"#).unwrap();
+    symlink(&keg, homebrew.join("opt/jarvis")).unwrap();
+    symlink(keg.join("bin/jarvis"), homebrew.join("bin/jarvis")).unwrap();
+    fs::write(&brew, "#!/bin/sh\necho \"$@\" > \"$(dirname \"$0\")/brew-args\"\n").unwrap();
+    fs::set_permissions(&brew, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let mut update = Command::new(homebrew.join("bin/jarvis"));
+    update.arg("--home").arg(&sandbox.home).arg("update");
+    let updated = sandbox.with_only_the_sandbox_git_config(&mut update).output().unwrap();
+
+    assert!(updated.status.success(), "{}", String::from_utf8_lossy(&updated.stderr));
+    assert_eq!(
+        fs::read_to_string(homebrew.join("bin/brew-args")).unwrap().trim(),
+        "upgrade someone/tap/jarvis"
+    );
+    let registered = sandbox.git_output(&sandbox.home, &["config", "--global", "hook.jarvis.command"]);
+    assert!(registered.contains(lasting_jarvis.to_str().unwrap()), "{registered}");
 }

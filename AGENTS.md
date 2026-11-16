@@ -49,6 +49,10 @@ agent session.
 - **`clone`** copies core files or skills from those standards into
   `~/.jarvis/custom`, for the person to change. It takes their names, or
   offers a list to tick in a terminal, and leaves alone what is already there.
+- **`update`** has the tool that installed the binary, Homebrew or cargo,
+  install the newest one, then runs that binary's `install`. A binary cargo
+  built from a checkout is rebuilt from that checkout as it is; pulling newer
+  commits there stays with the person.
 - **`hook`** is what the agent hooks run. It replies with the core.
 - **`pre-push`** is what the git hook runs. It starts the headless agent the
   settings name with the `review` skill. Claude Code may only read files and
@@ -200,6 +204,20 @@ agent session.
   of a skill deletes it. A piece with the name of a given one replaces it and
   any other is added. Whatever they did not take over keeps changing with the
   binary, which is why `clone` copies only what it is asked for.
+- **Updating.** jarvis has no download of its own. Whoever installed the
+  binary keeps the record of where it came from, so `update` reads that record
+  and has the same tool install again: `brew upgrade` of the formula named
+  with its tap, which makes Homebrew look at the tap first, or the
+  `cargo install` cargo's `.crates.toml` describes. An install pinned to a tag
+  or a commit never moves, so `update` says so and stops.
+- **The path in the hooks.** Homebrew deletes the folder of a version it
+  replaces, and on Linux the path a process reports for itself is that folder.
+  So a binary inside a Homebrew `Cellar` registers
+  `<prefix>/opt/<formula>/bin/jarvis` in the hooks, which Homebrew repoints at
+  each new version
+  (https://docs.brew.sh/Formula-Cookbook). A person's own `brew upgrade` then
+  leaves the hooks working. `update` starts the new binary through the same
+  path.
 - **Hook files.** jarvis hooks are matched loosely, not on the exact command,
   so hooks written by a binary at an older path are still replaced. A hook file
   that is not a JSON object is an error: jarvis never overwrites configuration
@@ -323,13 +341,14 @@ or `VERDICT: FAIL`. jarvis reads only that line.
 | Path | Holds |
 | --- | --- |
 | `src/cli.rs` | Command-line definition. |
-| `src/commands/` | One file per command: `install`, `uninstall`, `clone`, `status`, `settings`, `hook`, `pre_push`. `repo/` holds `init` and `audit`. |
+| `src/commands/` | One file per command: `install`, `uninstall`, `update`, `clone`, `status`, `settings`, `hook`, `pre_push`. `repo/` holds `init` and `audit`. |
 | `src/agents/` | One file per agent, one per agent's model catalog and one per agent's settings for a repository, plus hook-file editing, skill copying and status checks. |
 | `src/check/` | The check type, its table and JSON output, the report `status` and `repo audit` print, and a check paired with its remedy. |
 | `src/ui/` | The colour palette and styled messages every command prints through. `prompt/` holds the keyboard-driven picker, checklist and text input. |
 | `src/review/` | Running the reviewer, reading its verdict, counting its fix commits and remembering refused pushes. |
 | `src/git/` | Git hook registration, finding the pushed commits the remote lacks, and what an agent working in the repository needs to know about it. |
 | `src/standards/` | Loading a standards folder, where an install takes its standards from, and laying a person's own over them. |
+| `src/origin/` | Telling whether Homebrew or cargo installed the binary, and the upgrade each one runs. |
 | `build.rs` | Has cargo rebuild when `standards/` changes. |
 | `src/settings.rs` | Reading and writing `~/.jarvis/settings.toml`. |
 | `tests/e2e.rs` | Whole-command tests in a throwaway home with a fake reviewer. |
@@ -350,6 +369,8 @@ To add a setting, add its field in `src/settings.rs` and a `Setting` variant in
   a Codex `sandbox_mode` set in a config file.
 - `CLAUDE_CONFIG_DIR` and `CODEX_HOME` are not followed. jarvis reads and
   writes each agent's files under the home folder only.
+- No Homebrew formula and no release build yet. Until there are, `update` only
+  has cargo installs to work with.
 - `status` does not say when the packaged original of a cloned piece has
   changed since it was cloned.
 - A person's own standards can replace and add pieces, not remove a packaged

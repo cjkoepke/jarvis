@@ -6,3 +6,4 @@ pub mod repo;
 pub mod settings;
 pub mod status;
 pub mod uninstall;
+pub mod update;

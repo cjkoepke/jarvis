@@ -1,3 +1,4 @@
+use crate::origin;
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
@@ -16,8 +17,11 @@ impl Env {
         let home = home
             .canonicalize()
             .with_context(|| format!("home directory {} does not exist", home.display()))?;
-        let jarvis_executable = std::env::current_exe().context("locating the jarvis binary")?;
-        Ok(Env { home, jarvis_executable })
+        let started_as = std::env::current_exe().context("locating the jarvis binary")?;
+        Ok(Env {
+            home,
+            jarvis_executable: origin::lasting_executable(&started_as),
+        })
     }
 
     pub fn jarvis_dir(&self) -> PathBuf {

@@ -39,6 +39,7 @@ jarvis install
 | `jarvis settings` | Picks the reviewer, its model and whether it fixes what it finds, with the arrow keys. |
 | `jarvis repo init` | Lets the reviewer fix in the repository you are in. It asks before it trusts the repository in each agent, then adds the rules to edit and commit. Both apply to every session of those agents there. |
 | `jarvis repo audit` | Shows whether the reviewer may fix there, and offers to put right what is missing, one tick per fix. |
+| `jarvis update` | Brings jarvis up to date through Homebrew or cargo, whichever installed it, and sets everything up again. Installed from a checkout, it rebuilds that checkout as it is. |
 | `jarvis uninstall` | Removes everything `install` added and nothing else. |
 
 It needs Git 2.54 or newer and Claude Code or Codex. Codex asks you to approve
