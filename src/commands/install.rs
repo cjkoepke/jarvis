@@ -51,12 +51,7 @@ pub fn run(env: &Env, args: &InstallArgs) -> Result<ExitCode> {
 
 fn standards_source(env: &Env, args: &InstallArgs, previous: Option<&InstallRecord>) -> Result<Source> {
     let source = match &args.standards {
-        Some(named) => {
-            let folder = named
-                .canonicalize()
-                .with_context(|| format!("the standards folder {} does not exist", named.display()))?;
-            Source::Folder(folder)
-        }
+        Some(named) => Source::Folder(named.clone()),
         None if args.packaged => Source::Packaged,
         None => {
             let gone = previous.and_then(|record| record.standards_source.as_deref().filter(|folder| !folder.is_dir()));
@@ -66,7 +61,16 @@ fn standards_source(env: &Env, args: &InstallArgs, previous: Option<&InstallReco
             InstallRecord::standards_in_effect(previous)
         }
     };
-    if let Some(inside) = source.folder().filter(|folder| folder.starts_with(env.jarvis_dir())) {
+    let jarvis_dir = env.jarvis_dir().canonicalize().unwrap_or_else(|_| env.jarvis_dir());
+    let source = match source {
+        Source::Folder(folder) => Source::Folder(
+            folder
+                .canonicalize()
+                .with_context(|| format!("the standards folder {} does not exist", folder.display()))?,
+        ),
+        Source::Packaged => Source::Packaged,
+    };
+    if let Some(inside) = source.folder().filter(|folder| folder.starts_with(&jarvis_dir)) {
         bail!(
             "{} is inside {}, where jarvis writes what it installs; keep your standards in another folder, put single pieces in {}, or pass `--packaged`",
             inside.display(),

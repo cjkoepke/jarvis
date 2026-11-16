@@ -383,6 +383,23 @@ fn install_falls_back_to_the_packaged_standards_when_the_last_folder_is_gone() {
 }
 
 #[test]
+fn install_refuses_sources_inside_a_symlinked_jarvis_directory() {
+    let sandbox = Sandbox::new();
+    let storage = sandbox.home.join("storage");
+    fs::create_dir_all(&storage).unwrap();
+    symlink(&storage, sandbox.home.join(".jarvis")).unwrap();
+    assert!(sandbox.jarvis(&["install", "--packaged"]).status.success());
+    let installed = storage.join("standards");
+    let record = fs::read(storage.join("install.json")).unwrap();
+
+    assert!(!sandbox
+        .jarvis(&["install", "--standards", installed.to_str().unwrap()])
+        .status
+        .success());
+    assert_eq!(fs::read(storage.join("install.json")).unwrap(), record);
+}
+
+#[test]
 fn your_own_standards_replace_and_extend_the_packaged_ones_and_outlast_an_uninstall() {
     let sandbox = Sandbox::new();
     let custom = sandbox.home.join(".jarvis/custom");
