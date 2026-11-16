@@ -20,7 +20,13 @@ pub fn copy_dir(from: &Path, to: &Path) -> Result<()> {
 /// Swaps in the new contents in one step, so nothing ever reads the file half written.
 /// A symlink keeps pointing at the file it names, and that file keeps its permissions.
 pub fn replace(file: &Path, contents: &str) -> Result<()> {
-    let target = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
+    let target = match file.canonicalize() {
+        Ok(target) => target,
+        Err(error) if file.is_symlink() => {
+            return Err(error).with_context(|| format!("resolving configuration symlink {}", file.display()));
+        }
+        Err(_) => file.to_path_buf(),
+    };
     let dir = target.parent().with_context(|| format!("{} has no folder", target.display()))?;
     fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
 
@@ -84,4 +90,29 @@ fn relative_files(root: &Path) -> Result<Vec<PathBuf>> {
     }
     files.sort();
     Ok(files)
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::{symlink, PermissionsExt};
+
+    #[test]
+    fn replacement_preserves_configuration_symlinks_even_when_the_target_is_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("settings.json");
+        let link = dir.path().join("linked.json");
+        symlink(&target, &link).unwrap();
+
+        assert!(replace(&link, "{}").is_err());
+        assert_eq!(fs::read_link(&link).unwrap(), target);
+        assert!(!target.exists());
+
+        replace(&target, "old").unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o640)).unwrap();
+        replace(&link, "new").unwrap();
+        assert_eq!(fs::read_link(&link).unwrap(), target);
+        assert_eq!(fs::read_to_string(&target).unwrap(), "new");
+        assert_eq!(fs::metadata(&target).unwrap().permissions().mode() & 0o777, 0o640);
+    }
 }
