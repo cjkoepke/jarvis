@@ -42,8 +42,29 @@ Read every skill whose description bears on the commits. Before a push they are 
 3. Do not praise, summarise, or suggest improvements the standards do not ask for.
 4. Include a code quality coverage review and possible areas to refine, consolidate, or generally simplify on the assumption that you are a better model than whatever made the changes.
 
+## Fix
+
+Before a push, jarvis says whether you may fix what you find:
+
+```sh
+printenv JARVIS_REVIEW_FIX
+```
+
+When it prints `true`, fix every violation you can. You may edit files in the repository with your file-editing tool or `sed`, and run `git status`, `git add`, `git commit` and `git restore`. Expect anything else to be denied, such as a `git` command that follows a `cd`.
+
+1. Edit the files, then commit the fixes the way the standards ask of any commit.
+2. Stage only the files you changed, by name.
+3. Only add commits. Never amend, rebase or push, and never skip signing or hooks. A violation that only a rewritten commit can fix, such as a commit message, stays unfixed.
+4. Leave no uncommitted edit behind. Undo one you cannot commit with `git restore`.
+
+Otherwise change nothing.
+
 ## Reply
 
-List each violation as `<file>:<line>`, the standard it breaks, and what to change.
+List each violation as `<file>:<line>`, the standard it breaks, and what to change. For one you fixed, say what you changed instead.
 
-End with exactly one final line: `VERDICT: PASS` when there are no violations, `VERDICT: FAIL` otherwise.
+End with exactly one final line:
+
+- `VERDICT: PASS` when there are no violations.
+- `VERDICT: FIXED` when you fixed and committed every violation.
+- `VERDICT: FAIL` otherwise.

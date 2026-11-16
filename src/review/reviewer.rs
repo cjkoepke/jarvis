@@ -1,6 +1,6 @@
-use crate::agents::{self, Agent};
+use crate::agents::{self, Agent, ReviewRun};
 use crate::files::find_on_path;
-use crate::git::outgoing::Outgoing;
+use crate::git::{outgoing::Outgoing, repo::Repo};
 use crate::paths::Env;
 use crate::settings::ReviewSettings;
 use crate::standards::{Skill, Standards};
@@ -18,10 +18,12 @@ const REVIEW_SKILL: &str = "review";
 const STANDARDS_VARIABLE: &str = "JARVIS_STANDARDS";
 const REMOTE_VARIABLE: &str = "JARVIS_PUSH_REMOTE";
 const COMMITS_VARIABLE: &str = "JARVIS_PUSH_COMMITS";
+const FIX_VARIABLE: &str = "JARVIS_REVIEW_FIX";
 
 pub struct Reviewer<'a> {
     pub agent: &'static dyn Agent,
     pub model: Option<&'a str>,
+    pub may_fix: bool,
     core: &'a str,
     skill: &'a Skill,
 }
@@ -48,6 +50,7 @@ pub fn choose<'a>(standards: &'a Standards, settings: &'a ReviewSettings) -> Res
     Ok(Reviewer {
         agent,
         model: settings.model.as_deref(),
+        may_fix: false,
         core: &standards.core,
         skill,
     })
@@ -64,9 +67,20 @@ pub fn ask(reviewer: &Reviewer, env: &Env, outgoing: &Outgoing) -> Result<String
     fs::write(&prompt_file, format!("{}\n\n{skill}", reviewer.core))?;
 
     let standards_dir = env.installed_standards_dir();
-    let mut command = agent.review_command(&standards_dir, reviewer.model);
+    let repo = Repo::current()?;
+    let run = ReviewRun {
+        standards_dir: &standards_dir,
+        repo: &repo,
+        model: reviewer.model,
+    };
+    let mut command = if reviewer.may_fix {
+        agent.fixing_review_command(&run)
+    } else {
+        agent.review_command(&run)
+    };
     command
         .env(STANDARDS_VARIABLE, &standards_dir)
+        .env(FIX_VARIABLE, reviewer.may_fix.to_string())
         .env(REMOTE_VARIABLE, &outgoing.remote)
         .env(COMMITS_VARIABLE, outgoing.commits.join(" "))
         .stdin(File::open(&prompt_file)?)

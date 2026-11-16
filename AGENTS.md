@@ -46,7 +46,9 @@ try it from an agent session.
   read-only sandbox. Violations refuse the push and are printed to the caller,
   so an agent that ran `git push` reads them as the command's output. A push
   is reviewed once: after a refusal the next attempt goes out without a review,
-  and the push after that is reviewed again.
+  and the push after that is reviewed again. With `review.fix` on, the
+  reviewer fixes what it finds and commits the fixes on top; that push is
+  still refused, and the next attempt sends them.
 - **`status`** shows checks on the standards, each agent's hooks and skills,
   the git hook and the reviewer. `--format json` prints the same for an agent.
   It only reports, and each failed row says how to fix it.
@@ -61,6 +63,8 @@ try it from an agent session.
   push through.
 - `install` and `uninstall` leave configuration they did not write alone.
 - Every path hangs off `Env::home`, so `--home` moves a whole install.
+- Claude Code and Codex stay at parity. A capability added for one agent is
+  added for the other in the same change.
 - Nothing is ever written to the standards source folder. A machine that got
   jarvis as a binary does not have one.
 
@@ -91,6 +95,32 @@ try it from an agent session.
   ref still has that tip, and the record is dropped as soon as a push is let
   through. So the pass is spent once and cannot outlive a push, even one made
   from another clone.
+- **Fixing reviewer.** A pre-push hook cannot change which commits its push
+  sends, so a push the reviewer fixed is refused like any other and the fix
+  rides on the one unreviewed push that follows. The reviewer commits on
+  `HEAD`, so it only fixes a push of `HEAD` alone with no uncommitted edits to
+  tracked files; any other push gets the read-only review. `VERDICT: FIXED` is
+  only believed when `HEAD` gained commits on top of the pushed one.
+- **Fixing permissions, Claude Code.** `--safe-mode` keeps the person's
+  `CLAUDE.md`, skills and hooks out of the review, but their permission
+  settings still apply. The fixing run adds only `Edit` inside the repository,
+  `sed`, and `git status`, `add`, `commit` and `restore`; `--permission-prompts none`
+  denies the rest. In a permission rule `//` starts a path at the filesystem
+  root, and an `Edit` rule covers every tool that writes files
+  (https://code.claude.com/docs/en/permissions). It also bounds `sed -i`, which
+  Claude Code denies on a file outside the repository. Claude Code denies a `git`
+  command that follows a `cd`, so `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR`
+  keeps the reviewer's shell in the repository.
+- **Fixing permissions, Codex.** The fixing run swaps the read-only sandbox
+  for `workspace-write`, with the person's `config.toml` still loaded. That
+  sandbox keeps `.git` read-only, so the repository's git folders are passed
+  with `--add-dir`; a linked worktree has two. A signing agent is reached over
+  a socket, which the sandbox counts as network, so network access is switched
+  on only when `commit.gpgsign` is set.
+- **Signing without a terminal.** A reviewer has no terminal for a passphrase
+  prompt, so a signed commit only works while the signing agent has the key
+  unlocked. When it does not, the reviewer undoes its edit and the push is
+  refused for the pusher to fix.
 - **`printenv` takes one name.** macOS `printenv` prints only the first
   variable it is given, so the review skill reads each on its own line.
 - **Standards the binary was built from.** Cargo bakes the checkout path in at
@@ -121,6 +151,7 @@ removes.
 | --- | --- |
 | `review.agent` | The agent that reviews every push: `claude` (the default) or `codex`. |
 | `review.model` | The model it reviews on. Without one, the agent's own default. |
+| `review.fix` | Whether the reviewer fixes what it finds and commits it. `false` by default. |
 
 `jarvis settings` offers the models each agent shows in its own `/model`
 picker. Both lists are read the same way, from the catalog the agent keeps on
@@ -165,9 +196,10 @@ jarvis sets for the review:
 | `JARVIS_PUSH_REMOTE` | The remote being pushed to. |
 | `JARVIS_PUSH_COMMITS` | The tip of each pushed ref the remote lacks, separated by spaces. |
 | `JARVIS_STANDARDS` | The installed standards folder, holding `core/` and `skills/`. |
+| `JARVIS_REVIEW_FIX` | `true` when the reviewer may fix what it finds and commit, `false` otherwise. |
 
-The review skill must ask for a last line of `VERDICT: PASS` or
-`VERDICT: FAIL`. jarvis reads only that line.
+The review skill must ask for a last line of `VERDICT: PASS`, `VERDICT: FIXED`
+or `VERDICT: FAIL`. jarvis reads only that line.
 
 ## Source layout
 
@@ -178,8 +210,8 @@ The review skill must ask for a last line of `VERDICT: PASS` or
 | `src/agents/` | One file per agent and one per agent's model catalog, plus hook-file editing, skill copying and status checks. |
 | `src/check/` | The check type and its table and JSON output. |
 | `src/ui/` | The colour palette and styled messages every command prints through. `prompt/` holds the keyboard-driven picker and text input. |
-| `src/review/` | Running the reviewer and reading its verdict. |
-| `src/git/` | Git hook registration and finding the pushed commits the remote lacks. |
+| `src/review/` | Running the reviewer, reading its verdict, counting its fix commits and remembering refused pushes. |
+| `src/git/` | Git hook registration, finding the pushed commits the remote lacks, and what a fixing reviewer needs to know about the repository. |
 | `src/standards.rs` | Loading the standards folder. |
 | `src/settings.rs` | Reading and writing `~/.jarvis/settings.toml`. |
 | `tests/e2e.rs` | Whole-command tests in a throwaway home with a fake reviewer. |
@@ -193,7 +225,7 @@ To add a setting, add its field in `src/settings.rs` and a `Setting` variant in
 
 ## Not built yet
 
-- The reviewer only reports. It does not fix what it finds.
+- The reviewer cannot fix a commit message: it only adds commits.
 - No repo bootstrap or sync.
 - Codex delivery only works once the hooks are approved with `/hooks`. Until
   then Codex skips them and sessions start without the standards.
