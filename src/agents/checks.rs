@@ -81,6 +81,14 @@ fn skills_check(agent: &dyn Agent, env: &Env, standards: &Standards) -> Check {
             skills_dir.display()
         ));
     }
+    let dropped = skills::no_longer_in_standards(agent, env, standards);
+    if !dropped.is_empty() {
+        return skills.fail(format!(
+            "{} in {} are no longer in the standards; run `jarvis install`",
+            dropped.join(", "),
+            skills_dir.display()
+        ));
+    }
     skills.ok(format!("{} installed", standards.skills.len()))
 }
 
