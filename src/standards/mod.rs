@@ -1,11 +1,15 @@
+pub mod custom;
+pub mod source;
+
 use crate::files::{has_extension, sorted_entries};
 use anyhow::{bail, Context, Result};
+use source::Source;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 pub const CORE_MAX_CHARS: usize = 6000;
 
-const SKILL_FILE: &str = "SKILL.md";
+pub(crate) const SKILL_FILE: &str = "SKILL.md";
 
 pub struct Skill {
     pub name: String,
@@ -30,6 +34,13 @@ impl Standards {
             skills: load_skills(&root.join("skills"))?,
         })
     }
+}
+
+/// Writes the standards an install delivers into `dir`: the source's, with the person's own
+/// from `custom_dir` laid over them.
+pub fn assemble(source: &Source, custom_dir: &Path, dir: &Path) -> Result<()> {
+    source.copy_into(dir)?;
+    custom::lay_over(custom_dir, dir)
 }
 
 fn load_core(dir: &Path) -> Result<String> {

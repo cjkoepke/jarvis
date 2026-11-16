@@ -31,6 +31,9 @@ pub fn install(agent: &dyn Agent, env: &Env, standards: &Standards) -> Result<Ve
             "Installed by jarvis. Changes here are overwritten by `jarvis install`.\n",
         )?;
     }
+    for dropped in no_longer_in_standards(agent, env, standards) {
+        fs::remove_dir_all(skills_dir.join(dropped))?;
+    }
     Ok(skipped)
 }
 
@@ -63,6 +66,16 @@ pub fn out_of_date<'a>(agent: &dyn Agent, env: &Env, standards: &'a Standards) -
         .filter(differs_from_standards)
         .map(|skill| skill.name.as_str())
         .collect()
+}
+
+/// The skills an earlier install copied that the standards have since lost.
+pub fn no_longer_in_standards(agent: &dyn Agent, env: &Env, standards: &Standards) -> Vec<String> {
+    let installed = sorted_entries(&agent.skills_dir(env)).unwrap_or_default().into_iter();
+    let names = installed
+        .filter(|dir| is_installed_by_jarvis(dir))
+        .filter_map(|dir| Some(dir.file_name()?.to_str()?.to_string()));
+    let is_in_standards = |name: &String| standards.skills.iter().any(|skill| skill.name == *name);
+    names.filter(|name| !is_in_standards(name)).collect()
 }
 
 fn is_installed_by_jarvis(skill_dir: &Path) -> bool {

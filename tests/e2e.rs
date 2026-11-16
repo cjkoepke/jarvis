@@ -1,6 +1,6 @@
 use serde_json::Value;
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use tempfile::TempDir;
@@ -367,7 +367,7 @@ fn a_fixing_reviewer_finds_the_gpg_agent_started_when_the_repository_signs_commi
 }
 
 #[test]
-fn install_falls_back_to_the_checkout_it_was_built_from_when_the_last_folder_is_gone() {
+fn install_falls_back_to_the_packaged_standards_when_the_last_folder_is_gone() {
     let sandbox = Sandbox::new();
     let record_file = sandbox.home.join(".jarvis/install.json");
     fs::create_dir_all(record_file.parent().unwrap()).unwrap();
@@ -378,7 +378,69 @@ fn install_falls_back_to_the_checkout_it_was_built_from_when_the_last_folder_is_
     .unwrap();
 
     assert!(sandbox.jarvis(&["install"]).status.success());
-    assert_eq!(read_json(&record_file)["standards_source"], STANDARDS);
+    assert!(read_json(&record_file)["standards_source"].is_null());
+    assert!(sandbox.home.join(".jarvis/standards/skills/review/SKILL.md").is_file());
+}
+
+#[test]
+fn install_refuses_sources_inside_a_symlinked_jarvis_directory() {
+    let sandbox = Sandbox::new();
+    let storage = sandbox.home.join("storage");
+    fs::create_dir_all(&storage).unwrap();
+    symlink(&storage, sandbox.home.join(".jarvis")).unwrap();
+    assert!(sandbox.jarvis(&["install", "--packaged"]).status.success());
+    let installed = storage.join("standards");
+    let record = fs::read(storage.join("install.json")).unwrap();
+
+    assert!(!sandbox
+        .jarvis(&["install", "--standards", installed.to_str().unwrap()])
+        .status
+        .success());
+    assert_eq!(fs::read(storage.join("install.json")).unwrap(), record);
+}
+
+#[test]
+fn your_own_standards_replace_and_extend_the_packaged_ones_and_outlast_an_uninstall() {
+    let sandbox = Sandbox::new();
+    let custom = sandbox.home.join(".jarvis/custom");
+    let installed = sandbox.home.join(".jarvis/standards");
+    let packaged_review = fs::read_to_string(Path::new(STANDARDS).join("skills/review/SKILL.md")).unwrap();
+    assert!(sandbox.jarvis(&["install", "--packaged"]).status.success());
+
+    assert!(sandbox.jarvis(&["clone", "skills/review"]).status.success());
+    let own_review = custom.join("skills/review/SKILL.md");
+    assert_eq!(fs::read_to_string(&own_review).unwrap(), packaged_review);
+    assert!(!sandbox.jarvis(&["clone", "skills/no-such-skill"]).status.success());
+
+    fs::write(&own_review, "my own review\n").unwrap();
+    fs::create_dir_all(custom.join("skills/mine")).unwrap();
+    fs::write(custom.join("skills/mine/SKILL.md"), "a skill of mine\n").unwrap();
+    fs::create_dir_all(custom.join("core")).unwrap();
+    fs::write(custom.join("core/zz-mine.md"), "A rule of my own.\n").unwrap();
+    assert!(sandbox.jarvis(&["clone", "skills/review"]).status.success());
+    assert_eq!(fs::read_to_string(&own_review).unwrap(), "my own review\n");
+
+    assert!(sandbox.jarvis(&["install"]).status.success());
+    assert_eq!(
+        fs::read_to_string(installed.join("skills/review/SKILL.md")).unwrap(),
+        "my own review\n"
+    );
+    assert!(installed.join("skills/coding/SKILL.md").is_file());
+    assert!(sandbox.home.join(".claude/skills/mine/SKILL.md").is_file());
+    let session_start = sandbox.jarvis(&["hook", "claude", "SessionStart"]);
+    assert!(String::from_utf8_lossy(&session_start.stdout).contains("A rule of my own."));
+
+    fs::remove_dir_all(custom.join("skills/mine")).unwrap();
+    assert!(sandbox.jarvis(&["install"]).status.success());
+    assert!(!sandbox.home.join(".claude/skills/mine").exists());
+    assert!(!sandbox
+        .jarvis(&["install", "--standards", installed.to_str().unwrap()])
+        .status
+        .success());
+
+    assert!(sandbox.jarvis(&["uninstall"]).status.success());
+    assert!(!installed.exists());
+    assert_eq!(fs::read_to_string(&own_review).unwrap(), "my own review\n");
 }
 
 #[test]
@@ -463,4 +525,34 @@ fn codex_only_gets_a_run_that_can_fix_in_a_repository_it_trusts() {
     sandbox.commit(&repo, "more.rs", "fn more() {}\n");
     assert!(sandbox.push(&repo).status.success());
     assert!(!fs::read_to_string(&codex_args).unwrap().contains("--sandbox"));
+}
+
+#[test]
+fn update_upgrades_through_homebrew_and_registers_the_path_that_outlasts_an_upgrade() {
+    let sandbox = Sandbox::new();
+    let homebrew = sandbox.home.join("homebrew");
+    let keg = homebrew.join("Cellar/jarvis/1.0.0");
+    let brew = homebrew.join("bin/brew");
+    let lasting_jarvis = homebrew.join("opt/jarvis/bin/jarvis");
+    for folder in [keg.join("bin"), homebrew.join("bin"), homebrew.join("opt")] {
+        fs::create_dir_all(folder).unwrap();
+    }
+    fs::copy(env!("CARGO_BIN_EXE_jarvis"), keg.join("bin/jarvis")).unwrap();
+    fs::write(keg.join("INSTALL_RECEIPT.json"), r#"{"source":{"tap":"someone/tap"}}"#).unwrap();
+    symlink(&keg, homebrew.join("opt/jarvis")).unwrap();
+    symlink(keg.join("bin/jarvis"), homebrew.join("bin/jarvis")).unwrap();
+    fs::write(&brew, "#!/bin/sh\necho \"$@\" > \"$(dirname \"$0\")/brew-args\"\n").unwrap();
+    fs::set_permissions(&brew, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let mut update = Command::new(homebrew.join("bin/jarvis"));
+    update.arg("--home").arg(&sandbox.home).arg("update");
+    let updated = sandbox.with_only_the_sandbox_git_config(&mut update).output().unwrap();
+
+    assert!(updated.status.success(), "{}", String::from_utf8_lossy(&updated.stderr));
+    assert_eq!(
+        fs::read_to_string(homebrew.join("bin/brew-args")).unwrap().trim(),
+        "upgrade someone/tap/jarvis"
+    );
+    let registered = sandbox.git_output(&sandbox.home, &["config", "--global", "hook.jarvis.command"]);
+    assert!(registered.contains(lasting_jarvis.to_str().unwrap()), "{registered}");
 }

@@ -4,6 +4,7 @@ mod cli;
 mod commands;
 mod files;
 mod git;
+mod origin;
 mod paths;
 mod record;
 mod review;
@@ -36,7 +37,9 @@ fn main() -> ExitCode {
     let outcome = match cli.command {
         Cmd::Install(args) => commands::install::run(&env, &args),
         Cmd::Uninstall => commands::uninstall::run(&env),
+        Cmd::Update => commands::update::run(&env),
         Cmd::Status { format } => commands::status::run(&env, format),
+        Cmd::Clone { pieces } => commands::clone::run(&env, &pieces),
         Cmd::Settings => commands::settings::run(&env),
         Cmd::Repo { command } => commands::repo::run(&env, command),
         Cmd::Hook { agent, event } => Ok(commands::hook::run(&env, &agent, &event)),

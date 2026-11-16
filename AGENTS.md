@@ -1,6 +1,6 @@
 # Working on jarvis
 
-jarvis is a Rust command-line tool. It delivers one folder of standards to every
+jarvis is a Rust command-line tool. It delivers one set of standards to every
 AI agent session and sub-agent on the machine, and has an agent review every
 `git push` against the same standards. `README.md` says why; this file says how
 it is built.
@@ -17,7 +17,7 @@ Run it against a throwaway home, never the real one:
 
 ```sh
 mkdir -p /tmp/jarvis-home
-target/debug/jarvis --home /tmp/jarvis-home install --standards ./standards
+target/debug/jarvis --home /tmp/jarvis-home install
 target/debug/jarvis --home /tmp/jarvis-home status
 target/debug/jarvis --home /tmp/jarvis-home hook claude SessionStart
 target/debug/jarvis --home /tmp/jarvis-home uninstall
@@ -35,13 +35,24 @@ agent session.
 
 ## What each command does
 
-- **`install`** copies the standards to `~/.jarvis/standards`, registers
+- **`install`** writes the standards to `~/.jarvis/standards`, registers
   `SessionStart` and `SubagentStart` hooks for Claude Code and Codex, copies
   the skills to where each agent looks for them, and adds a `pre-push` hook to
-  the global git config (Git 2.54 or newer). A bare `jarvis install` reuses the
-  standards folder and agents of the last install. When that folder is gone it
-  falls back to the `standards/` of the checkout the binary was built from,
-  then to `./standards`.
+  the global git config (Git 2.54 or newer). The standards are the ones
+  packaged in the binary, or those of a folder named with `--standards`, with
+  the person's own from `~/.jarvis/custom` laid over them. A bare
+  `jarvis install` reuses the folder and agents of the last install. When that
+  folder is gone it goes back to the packaged standards, as `--packaged` does.
+  A folder inside `~/.jarvis` is refused, because an install would then read
+  what it wrote. Skills an earlier install delivered that the standards no
+  longer hold are removed from each agent.
+- **`clone`** copies core files or skills from those standards into
+  `~/.jarvis/custom`, for the person to change. It takes their names, or
+  offers a list to tick in a terminal, and leaves alone what is already there.
+- **`update`** has the tool that installed the binary, Homebrew or cargo,
+  install the newest one, then runs that binary's `install`. A binary cargo
+  built from a checkout is rebuilt from that checkout as it is; pulling newer
+  commits there stays with the person.
 - **`hook`** is what the agent hooks run. It replies with the core.
 - **`pre-push`** is what the git hook runs. It starts the headless agent the
   settings name with the `review` skill. Claude Code may only read files and
@@ -75,6 +86,7 @@ agent session.
   only reports.
 - **`uninstall`** removes everything `install` added and nothing else. What
   `repo init` wrote stays: those are each agent's own settings for a repository.
+  So does `~/.jarvis/custom`, which is the person's.
 
 ## Rules that must hold
 
@@ -87,6 +99,8 @@ agent session.
   added for the other in the same change.
 - Nothing is ever written to the standards source folder. A machine that got
   jarvis as a binary does not have one.
+- No command changes or removes a file in `~/.jarvis/custom`. `clone` only
+  adds what is not there yet.
 
 ## Why it is built this way
 
@@ -181,17 +195,38 @@ agent session.
   pusher to fix.
 - **`printenv` takes one name.** macOS `printenv` prints only the first
   variable it is given, so the review skill reads each on its own line.
-- **Standards the binary was built from.** Cargo bakes the checkout path in at
-  compile time. A binary that has left its checkout behind skips that folder
-  like any other that is gone.
+- **Packaged standards.** `include_dir` builds `standards/` into the binary,
+  so a machine that only has the binary has standards. The macro only notices
+  changes to files it already included, so `build.rs` has cargo rebuild when
+  anything in the folder changes.
+- **A person's own standards.** They take over one piece at a time: a core
+  file, or a skill with all its files, so that deleting a file from their copy
+  of a skill deletes it. A piece with the name of a given one replaces it and
+  any other is added. Whatever they did not take over keeps changing with the
+  binary, which is why `clone` copies only what it is asked for.
+- **Updating.** jarvis has no download of its own. Whoever installed the
+  binary keeps the record of where it came from, so `update` reads that record
+  and has the same tool install again: `brew upgrade` of the formula named
+  with its tap, which makes Homebrew look at the tap first, or the
+  `cargo install` cargo's `.crates.toml` describes. An install pinned to a tag
+  or a commit never moves, so `update` says so and stops.
+- **The path in the hooks.** Homebrew deletes the folder of a version it
+  replaces, and on Linux the path a process reports for itself is that folder.
+  So a binary inside a Homebrew `Cellar` registers
+  `<prefix>/opt/<formula>/bin/jarvis` in the hooks, which Homebrew repoints at
+  each new version
+  (https://docs.brew.sh/Formula-Cookbook). A person's own `brew upgrade` then
+  leaves the hooks working. `update` starts the new binary through the same
+  path.
 - **Hook files.** jarvis hooks are matched loosely, not on the exact command,
   so hooks written by a binary at an older path are still replaced. A hook file
   that is not a JSON object is an error: jarvis never overwrites configuration
   it could not read.
 - **Skills.** Only skill folders carrying a `.jarvis` file are replaced or
   removed, which keeps a person's own skill with the same name safe.
-- **Install order.** The standards source is loaded before anything is copied,
-  so a broken folder never replaces a working install.
+- **Install order.** The standards are put together in `~/.jarvis/standards.next`
+  and loaded there before they take the place of the installed ones, so a
+  broken source or custom folder never replaces a working install.
 - **Settings screen.** `Screen` restores raw mode and line wrapping when
   dropped. Wrapping is off while it is open because a wrapped line would make
   the block taller than the redraw expects.
@@ -264,14 +299,18 @@ edits.
 
 ## Standards folder
 
+The packaged standards, a folder named with `--standards` and
+`~/.jarvis/custom` all have this shape:
+
 | Folder | Used for |
 | --- | --- |
 | `core/*.md` | Always in context. Capped at 6,000 characters. |
 | `skills/<name>/SKILL.md` | Loaded by the agent when a task needs it, and by the reviewer when it bears on a push. |
 | `skills/review/SKILL.md` | How to review commits. Any agent can use it, and the pre-push reviewer runs it. |
 
-After the source changes, `jarvis status` reports the installed copy as out of
-date until the next `jarvis install`.
+After the source or `~/.jarvis/custom` changes, which includes a new binary
+with other packaged standards, `jarvis status` reports the installed copy as
+out of date until the next `jarvis install`.
 
 ## Prompts
 
@@ -302,13 +341,15 @@ or `VERDICT: FAIL`. jarvis reads only that line.
 | Path | Holds |
 | --- | --- |
 | `src/cli.rs` | Command-line definition. |
-| `src/commands/` | One file per command: `install`, `uninstall`, `status`, `settings`, `hook`, `pre_push`. `repo/` holds `init` and `audit`. |
+| `src/commands/` | One file per command: `install`, `uninstall`, `update`, `clone`, `status`, `settings`, `hook`, `pre_push`. `repo/` holds `init` and `audit`. |
 | `src/agents/` | One file per agent, one per agent's model catalog and one per agent's settings for a repository, plus hook-file editing, skill copying and status checks. |
 | `src/check/` | The check type, its table and JSON output, the report `status` and `repo audit` print, and a check paired with its remedy. |
 | `src/ui/` | The colour palette and styled messages every command prints through. `prompt/` holds the keyboard-driven picker, checklist and text input. |
 | `src/review/` | Running the reviewer, reading its verdict, counting its fix commits and remembering refused pushes. |
 | `src/git/` | Git hook registration, finding the pushed commits the remote lacks, and what an agent working in the repository needs to know about it. |
-| `src/standards.rs` | Loading the standards folder. |
+| `src/standards/` | Loading a standards folder, where an install takes its standards from, and laying a person's own over them. |
+| `src/origin/` | Telling whether Homebrew or cargo installed the binary, and the upgrade each one runs. |
+| `build.rs` | Has cargo rebuild when `standards/` changes. |
 | `src/settings.rs` | Reading and writing `~/.jarvis/settings.toml`. |
 | `tests/e2e.rs` | Whole-command tests in a throwaway home with a fake reviewer. |
 
@@ -328,7 +369,14 @@ To add a setting, add its field in `src/settings.rs` and a `Setting` variant in
   a Codex `sandbox_mode` set in a config file.
 - `CLAUDE_CONFIG_DIR` and `CODEX_HOME` are not followed. jarvis reads and
   writes each agent's files under the home folder only.
-- No repo sync.
+- No Homebrew formula and no release build yet. Until there are, `update` only
+  has cargo installs to work with.
+- `status` does not say when the packaged original of a cloned piece has
+  changed since it was cloned.
+- A person's own standards can replace and add pieces, not remove a packaged
+  one.
+- A packaged skill is written without its files' permissions, so a script it
+  ships is not executable. A skill from a folder keeps them.
 - Codex delivery only works once the hooks are approved with `/hooks`. Until
   then Codex skips them and sessions start without the standards.
 - `status` cannot tell when Codex wants a changed hook approved again; it still

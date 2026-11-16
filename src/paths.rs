@@ -1,3 +1,4 @@
+use crate::origin;
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
@@ -16,8 +17,11 @@ impl Env {
         let home = home
             .canonicalize()
             .with_context(|| format!("home directory {} does not exist", home.display()))?;
-        let jarvis_executable = std::env::current_exe().context("locating the jarvis binary")?;
-        Ok(Env { home, jarvis_executable })
+        let started_as = std::env::current_exe().context("locating the jarvis binary")?;
+        Ok(Env {
+            home,
+            jarvis_executable: origin::lasting_executable(&started_as),
+        })
     }
 
     pub fn jarvis_dir(&self) -> PathBuf {
@@ -26,6 +30,16 @@ impl Env {
 
     pub fn installed_standards_dir(&self) -> PathBuf {
         self.jarvis_dir().join("standards")
+    }
+
+    /// Where an install puts the standards together before they replace the installed ones.
+    pub fn next_standards_dir(&self) -> PathBuf {
+        self.jarvis_dir().join("standards.next")
+    }
+
+    /// A person's own core files and skills, which no command overwrites.
+    pub fn custom_standards_dir(&self) -> PathBuf {
+        self.jarvis_dir().join("custom")
     }
 
     pub fn settings_file(&self) -> PathBuf {

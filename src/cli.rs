@@ -19,12 +19,19 @@ pub struct Cli {
 pub enum Cmd {
     #[command(about = "Copy the standards, register the agent hooks and the git pre-push review.")]
     Install(InstallArgs),
+    #[command(about = "Bring jarvis up to date with the tool that installed it, then set everything up again.")]
+    Update,
     #[command(about = "Remove everything `install` added and nothing else.")]
     Uninstall,
     #[command(about = "Show whether the standards, agent hooks, skills and git review are in place.")]
     Status {
         #[arg(long, value_enum, default_value_t = Format::Table, help = "`table` for a person, `json` for an agent.")]
         format: Format,
+    },
+    #[command(about = "Copy core files or skills you were given into ~/.jarvis/custom, to change them there.")]
+    Clone {
+        #[arg(help = "What to copy, such as `skills/review` or `core/core.md`. Without any, a list to tick from.")]
+        pieces: Vec<String>,
     },
     #[command(about = "Choose defaults such as the pre-push reviewer with the arrow keys.")]
     Settings,
@@ -74,9 +81,15 @@ pub enum Format {
 pub struct InstallArgs {
     #[arg(
         long,
-        help = "Folder holding core/ and skills/. Defaults to the last install's folder, then the checkout this binary was built from, then ./standards."
+        help = "Folder holding core/ and skills/, used in place of the packaged standards. Defaults to the last install's folder, then the packaged standards."
     )]
     pub standards: Option<PathBuf>,
+    #[arg(
+        long,
+        conflicts_with = "standards",
+        help = "Go back to the standards packaged with jarvis after an install from a folder."
+    )]
+    pub packaged: bool,
     #[arg(
         long,
         value_delimiter = ',',

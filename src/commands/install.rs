@@ -1,30 +1,30 @@
 use crate::agents::{self, hooks_file, skills, Agent, Approval};
 use crate::cli::InstallArgs;
-use crate::files::copy_dir;
 use crate::git::hook_config;
 use crate::paths::Env;
 use crate::record::InstallRecord;
-use crate::standards::Standards;
+use crate::standards::source::Source;
+use crate::standards::{self, custom, Standards};
 use crate::ui::{message, Tone};
 use anyhow::{bail, Context, Result};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::ExitCode;
-
-const DEFAULT_STANDARDS: &str = "standards";
-const STANDARDS_BUILT_FROM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/standards");
 
 pub fn run(env: &Env, args: &InstallArgs) -> Result<ExitCode> {
     let previous = InstallRecord::load(env);
-    let source = standards_source(args, previous.as_ref())?;
+    let source = standards_source(env, args, previous.as_ref())?;
     let agents = agents::chosen(agent_ids(args, previous.as_ref()))?;
 
     let standards = replace_installed_standards(env, &source)?;
+    let own = match custom::pieces(&env.custom_standards_dir())?.len() {
+        0 => String::new(),
+        count => format!(" with {count} of your own"),
+    };
     message::done(
         "standards",
         &format!(
-            "copied from {} to {} ({} skills)",
-            source.display(),
+            "{source}{own}, copied to {} ({} skills)",
             env.installed_standards_dir().display(),
             standards.skills.len()
         ),
@@ -40,7 +40,7 @@ pub fn run(env: &Env, args: &InstallArgs) -> Result<ExitCode> {
 
     let agent_ids = agents.iter().map(|agent| agent.id().to_string()).collect();
     InstallRecord {
-        standards_source: source,
+        standards_source: source.folder().map(Path::to_path_buf),
         agent_ids,
     }
     .save(env)?;
@@ -49,20 +49,36 @@ pub fn run(env: &Env, args: &InstallArgs) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn standards_source(args: &InstallArgs, previous: Option<&InstallRecord>) -> Result<PathBuf> {
-    if let Some(named) = &args.standards {
-        return named
-            .canonicalize()
-            .with_context(|| format!("the standards folder {} does not exist", named.display()));
-    }
-    let previous_source = previous.map(|record| record.standards_source.clone());
-    let fallbacks = [PathBuf::from(STANDARDS_BUILT_FROM), PathBuf::from(DEFAULT_STANDARDS)];
-    let candidates: Vec<PathBuf> = previous_source.into_iter().chain(fallbacks).collect();
-    let Some(source) = candidates.iter().find(|folder| folder.is_dir()) else {
-        let tried: Vec<String> = candidates.iter().map(|folder| folder.display().to_string()).collect();
-        bail!("no standards folder at {}; pass `--standards <folder>`", tried.join(", "));
+fn standards_source(env: &Env, args: &InstallArgs, previous: Option<&InstallRecord>) -> Result<Source> {
+    let source = match &args.standards {
+        Some(named) => Source::Folder(named.clone()),
+        None if args.packaged => Source::Packaged,
+        None => {
+            let gone = previous.and_then(|record| record.standards_source.as_deref().filter(|folder| !folder.is_dir()));
+            if let Some(gone) = gone {
+                message::note(&format!("{} is gone, so the packaged standards are used instead", gone.display()));
+            }
+            InstallRecord::standards_in_effect(previous)
+        }
     };
-    Ok(source.canonicalize()?)
+    let jarvis_dir = env.jarvis_dir().canonicalize().unwrap_or_else(|_| env.jarvis_dir());
+    let source = match source {
+        Source::Folder(folder) => Source::Folder(
+            folder
+                .canonicalize()
+                .with_context(|| format!("the standards folder {} does not exist", folder.display()))?,
+        ),
+        Source::Packaged => Source::Packaged,
+    };
+    if let Some(inside) = source.folder().filter(|folder| folder.starts_with(&jarvis_dir)) {
+        bail!(
+            "{} is inside {}, where jarvis writes what it installs; keep your standards in another folder, put single pieces in {}, or pass `--packaged`",
+            inside.display(),
+            env.jarvis_dir().display(),
+            env.custom_standards_dir().display()
+        );
+    }
+    Ok(source)
 }
 
 fn agent_ids<'a>(args: &'a InstallArgs, previous: Option<&'a InstallRecord>) -> &'a [String] {
@@ -72,17 +88,25 @@ fn agent_ids<'a>(args: &'a InstallArgs, previous: Option<&'a InstallRecord>) -> 
     }
 }
 
-fn replace_installed_standards(env: &Env, source: &Path) -> Result<Standards> {
-    Standards::load(source).with_context(|| format!("the standards in {} are not usable", source.display()))?;
-
+fn replace_installed_standards(env: &Env, source: &Source) -> Result<Standards> {
     let installed = env.installed_standards_dir();
-    let source_is_the_installed_copy = installed.canonicalize().ok().as_deref() == Some(source);
-    if !source_is_the_installed_copy {
-        if installed.exists() {
-            fs::remove_dir_all(&installed)?;
-        }
-        copy_dir(source, &installed)?;
+    let assembled = env.next_standards_dir();
+    if assembled.exists() {
+        fs::remove_dir_all(&assembled)?;
     }
+    let usable = standards::assemble(source, &env.custom_standards_dir(), &assembled).and_then(|()| Standards::load(&assembled));
+    if let Err(error) = usable {
+        fs::remove_dir_all(&assembled).ok();
+        return Err(error.context(format!(
+            "{source} with your own from {} are not usable",
+            env.custom_standards_dir().display()
+        )));
+    }
+
+    if installed.exists() {
+        fs::remove_dir_all(&installed)?;
+    }
+    fs::rename(&assembled, &installed).with_context(|| format!("writing {}", installed.display()))?;
     Standards::load(&installed)
 }
 
