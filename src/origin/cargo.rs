@@ -18,7 +18,7 @@ enum Source {
     Checkout(PathBuf),
     Git { url: String, branch: Option<String> },
     PinnedGit { url: String, pinned_to: String },
-    Registry,
+    Registry { index: String },
 }
 
 impl Tracked {
@@ -65,7 +65,7 @@ impl Tracked {
             Source::PinnedGit { url, pinned_to } => {
                 bail!("cargo installed this jarvis from {url} at {pinned_to}, which never moves; install the one you want with `cargo install --git {url}`")
             }
-            Source::Registry => vec![self.package.clone()],
+            Source::Registry { index } => vec!["--index".to_string(), index.clone(), self.package.clone()],
         };
         let Some(cargo) = self.cargo() else {
             bail!(
@@ -129,7 +129,12 @@ fn package_and_source(install: &str) -> Option<(String, Source)> {
                 },
             }
         }
-        "registry" | "sparse" => Source::Registry,
+        "registry" => Source::Registry {
+            index: location.to_string(),
+        },
+        "sparse" => Source::Registry {
+            index: format!("sparse+{location}"),
+        },
         _ => return None,
     };
     Some((package.to_string(), source))
@@ -157,6 +162,25 @@ fn percent_decoded(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn registry_updates_use_the_recorded_index() {
+        for source in ["registry+https://registry.example/index", "sparse+https://registry.example/index/"] {
+            let root = tempfile::tempdir().unwrap();
+            let binary = root.path().join("bin/jarvis");
+            fs::create_dir_all(binary.parent().unwrap()).unwrap();
+            fs::write(
+                root.path().join(TRACKING_FILE),
+                format!("[v1]\n\"jarvis 0.0.1 ({source})\" = [\"jarvis\"]\n"),
+            )
+            .unwrap();
+            let tracked = Tracked::at(&binary).unwrap();
+            let command = tracked.upgrade(root.path()).unwrap();
+            let arguments: Vec<_> = command.get_args().collect();
+            let index = source.strip_prefix("registry+").unwrap_or(source);
+            assert!(arguments.windows(2).any(|pair| pair == ["--index", index]));
+        }
+    }
 
     #[test]
     fn each_kind_of_install_cargo_records_is_read_as_the_source_to_install_from_again() {
@@ -187,7 +211,9 @@ mod tests {
         );
         assert_eq!(
             source_of("jarvis 0.0.1 (registry+https://github.com/rust-lang/crates.io-index)"),
-            Some(Source::Registry)
+            Some(Source::Registry {
+                index: "https://github.com/rust-lang/crates.io-index".to_string()
+            })
         );
         assert_eq!(source_of("jarvis 0.0.1 (elsewhere+somewhere)"), None);
     }
