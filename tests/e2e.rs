@@ -291,3 +291,18 @@ fn a_refusal_is_spent_by_any_push_of_that_ref_that_is_let_through() {
     assert!(!push_topic("HEAD:refs/heads/topic"));
     assert!(prompt.exists());
 }
+
+#[test]
+fn install_falls_back_to_the_checkout_it_was_built_from_when_the_last_folder_is_gone() {
+    let sandbox = Sandbox::new();
+    let record_file = sandbox.home.join(".jarvis/install.json");
+    fs::create_dir_all(record_file.parent().unwrap()).unwrap();
+    fs::write(
+        &record_file,
+        r#"{ "standards_source": "/a/folder/that/is/gone", "agent_ids": ["claude"] }"#,
+    )
+    .unwrap();
+
+    assert!(sandbox.jarvis(&["install"]).status.success());
+    assert_eq!(read_json(&record_file)["standards_source"], STANDARDS);
+}

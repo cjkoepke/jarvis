@@ -36,7 +36,9 @@ try it from an agent session.
   `SessionStart` and `SubagentStart` hooks for Claude Code and Codex, copies
   the skills to where each agent looks for them, and adds a `pre-push` hook to
   the global git config (Git 2.54 or newer). A bare `jarvis install` reuses the
-  standards folder and agents of the last install.
+  standards folder and agents of the last install. When that folder is gone it
+  falls back to the `standards/` of the checkout the binary was built from,
+  then to `./standards`.
 - **`hook`** is what the agent hooks run. It replies with the core.
 - **`pre-push`** is what the git hook runs. It starts the headless agent the
   settings name with the `review` skill. Claude Code may only read files and
@@ -89,6 +91,9 @@ try it from an agent session.
   ref still has that tip, and the record is dropped as soon as a push is let
   through. So the pass is spent once and cannot outlive a push, even one made
   from another clone.
+- **Standards the binary was built from.** Cargo bakes the checkout path in at
+  compile time. A binary that has left its checkout behind skips that folder
+  like any other that is gone.
 - **Hook files.** jarvis hooks are matched loosely, not on the exact command,
   so hooks written by a binary at an older path are still replaced. A hook file
   that is not a JSON object is an error: jarvis never overwrites configuration
