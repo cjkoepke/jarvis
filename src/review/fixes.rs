@@ -1,12 +1,23 @@
-use crate::git::{self, outgoing::Outgoing};
+use crate::git::{
+    self,
+    outgoing::{Outgoing, PushedRef},
+};
 use anyhow::{Context, Result};
 
-/// Whether fix commits made on HEAD would be part of the next push of these commits.
-pub fn can_follow(outgoing: &Outgoing) -> Result<bool> {
-    let head = git::run(&["rev-parse", "HEAD"])?;
-    let pushes_only_head = outgoing.commits == [head];
+const HEAD: &str = "HEAD";
+
+/// Whether fix commits made on HEAD would be part of the next push of these refs.
+pub fn can_follow(pushed: &[&PushedRef]) -> Result<bool> {
+    let [pushed] = pushed else {
+        return Ok(false);
+    };
     let uncommitted_edits = git::run(&["status", "--porcelain", "--untracked-files=no"])?;
-    Ok(pushes_only_head && uncommitted_edits.is_empty())
+    Ok(moves_with_head(pushed) && uncommitted_edits.is_empty())
+}
+
+fn moves_with_head(pushed: &PushedRef) -> bool {
+    let checked_out_branch = git::run(&["symbolic-ref", "--quiet", HEAD]);
+    pushed.local_ref == HEAD || checked_out_branch.is_ok_and(|branch| branch == pushed.local_ref)
 }
 
 /// How many commits HEAD gained on top of the pushed one. Zero when it gained none

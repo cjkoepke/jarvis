@@ -98,8 +98,9 @@ try it from an agent session.
 - **Fixing reviewer.** A pre-push hook cannot change which commits its push
   sends, so a push the reviewer fixed is refused like any other and the fix
   rides on the one unreviewed push that follows. The reviewer commits on
-  `HEAD`, so it only fixes a push of `HEAD` alone with no uncommitted edits to
-  tracked files; any other push gets the read-only review. `VERDICT: FIXED` is
+  `HEAD`, so it only fixes a push of a single ref that moves with `HEAD`, the
+  checked-out branch or `HEAD` itself, with no uncommitted edits to tracked
+  files; any other push gets the read-only review. `VERDICT: FIXED` is
   only believed when `HEAD` gained commits on top of the pushed one.
 - **Fixing permissions, Claude Code.** `--safe-mode` keeps the person's
   `CLAUDE.md`, skills and hooks out of the review, but their permission

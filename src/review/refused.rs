@@ -48,6 +48,7 @@ mod tests {
 
     fn pushed_to_main(remote_sha: &str) -> PushedRef {
         PushedRef {
+            local_ref: "refs/heads/main".to_string(),
             local_sha: "local".to_string(),
             remote_ref: "refs/heads/main".to_string(),
             remote_sha: remote_sha.to_string(),

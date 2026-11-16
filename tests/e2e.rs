@@ -322,6 +322,24 @@ fn a_reviewer_allowed_to_fix_commits_on_top_and_the_next_push_sends_its_fix() {
 }
 
 #[test]
+fn a_reviewer_does_not_fix_a_push_of_refs_its_commits_would_not_follow() {
+    let sandbox = Sandbox::new();
+    sandbox.install();
+    fs::write(sandbox.home.join(".jarvis/settings.toml"), "[review]\nfix = true\n").unwrap();
+    let repo = sandbox.repo_with_one_pushed_commit();
+    sandbox.commit(&repo, "lib.rs", "fn main() {}\n");
+    let unfixed = sandbox.head(&repo);
+    sandbox.git_output(&repo, &["branch", "topic"]);
+    sandbox.reviewer_commits_a_fix();
+    sandbox.reviewer_replies("lib.rs:1 breaks a standard\nVERDICT: FAIL");
+
+    for refs in [&["topic"][..], &["main", "main:refs/heads/other"]] {
+        assert!(!sandbox.git(&repo, &[&["push", "origin"], refs].concat()).status.success());
+        assert_eq!(sandbox.head(&repo), unfixed);
+    }
+}
+
+#[test]
 fn install_falls_back_to_the_checkout_it_was_built_from_when_the_last_folder_is_gone() {
     let sandbox = Sandbox::new();
     let record_file = sandbox.home.join(".jarvis/install.json");

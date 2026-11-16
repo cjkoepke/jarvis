@@ -106,7 +106,7 @@ fn review<'a>(env: &Env, push: &'a Push, refused: &RefusedPushes) -> Result<Opti
         remote: push.remote.clone(),
         commits,
     };
-    let next_step = match ask_reviewer(env, &outgoing)? {
+    let next_step = match ask_reviewer(env, &unreviewed, &outgoing)? {
         Verdict::Pass => return Ok(None),
         Verdict::Fail => PUSHER_FIXES.to_string(),
         Verdict::Fixed => next_step_after_fixes(&outgoing)?,
@@ -125,11 +125,11 @@ fn next_step_after_fixes(outgoing: &Outgoing) -> Result<String> {
     })
 }
 
-fn ask_reviewer(env: &Env, outgoing: &Outgoing) -> Result<Verdict> {
+fn ask_reviewer(env: &Env, unreviewed: &[&PushedRef], outgoing: &Outgoing) -> Result<Verdict> {
     let standards = Standards::load(&env.installed_standards_dir())?;
     let settings = Settings::load(&env.settings_file())?;
     let mut reviewer = reviewer::choose(&standards, &settings.review)?;
-    reviewer.may_fix = settings.review.fix && fixes::can_follow(outgoing)?;
+    reviewer.may_fix = settings.review.fix && fixes::can_follow(unreviewed)?;
     message::review_verdict(
         Tone::Muted,
         &format!("{reviewer} is reviewing the outgoing commits. This can take a few minutes."),
