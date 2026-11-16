@@ -12,7 +12,9 @@ Judge the commits against the standards in your context and the skills that bear
 Before a push, jarvis names what is being pushed:
 
 ```sh
-printenv JARVIS_PUSH_REMOTE JARVIS_PUSH_COMMITS JARVIS_STANDARDS
+printenv JARVIS_PUSH_REMOTE
+printenv JARVIS_PUSH_COMMITS
+printenv JARVIS_STANDARDS
 ```
 
 With those values, read each commit's message and change:

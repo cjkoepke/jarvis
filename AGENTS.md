@@ -91,6 +91,8 @@ try it from an agent session.
   ref still has that tip, and the record is dropped as soon as a push is let
   through. So the pass is spent once and cannot outlive a push, even one made
   from another clone.
+- **`printenv` takes one name.** macOS `printenv` prints only the first
+  variable it is given, so the review skill reads each on its own line.
 - **Standards the binary was built from.** Cargo bakes the checkout path in at
   compile time. A binary that has left its checkout behind skips that folder
   like any other that is gone.
