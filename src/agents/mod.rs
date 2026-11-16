@@ -5,6 +5,7 @@ mod codex;
 mod codex_models;
 mod codex_trust;
 pub mod hooks_file;
+mod json_config;
 pub mod skills;
 
 use crate::git::repo::Repo;

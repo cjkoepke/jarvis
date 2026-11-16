@@ -1,4 +1,5 @@
 pub mod json;
+pub mod report;
 pub mod table;
 
 use crate::ui::Tone;
