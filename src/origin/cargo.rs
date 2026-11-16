@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const TRACKING_FILE: &str = ".crates.toml";
+const CRATES_IO_INDEX: &str = "https://github.com/rust-lang/crates.io-index";
 
 /// A binary `cargo install` put in place, as cargo's own record of installs describes it.
 pub struct Tracked {
@@ -16,9 +17,18 @@ pub struct Tracked {
 #[derive(Debug, PartialEq)]
 enum Source {
     Checkout(PathBuf),
-    Git { url: String, branch: Option<String> },
-    PinnedGit { url: String, pinned_to: String },
-    Registry { index: String },
+    Git {
+        url: String,
+        branch: Option<String>,
+    },
+    PinnedGit {
+        url: String,
+        pinned_to: String,
+    },
+    /// Without an index it is crates.io, which cargo reaches fastest when left to itself.
+    Registry {
+        index: Option<String>,
+    },
 }
 
 impl Tracked {
@@ -65,7 +75,10 @@ impl Tracked {
             Source::PinnedGit { url, pinned_to } => {
                 bail!("cargo installed this jarvis from {url} at {pinned_to}, which never moves; install the one you want with `cargo install --git {url}`")
             }
-            Source::Registry { index } => vec!["--index".to_string(), index.clone(), self.package.clone()],
+            Source::Registry { index } => {
+                let from_its_index = index.iter().flat_map(|index| ["--index".to_string(), index.clone()]);
+                from_its_index.chain([self.package.clone()]).collect()
+            }
         };
         let Some(cargo) = self.cargo() else {
             bail!(
@@ -130,10 +143,10 @@ fn package_and_source(install: &str) -> Option<(String, Source)> {
             }
         }
         "registry" => Source::Registry {
-            index: location.to_string(),
+            index: Some(location.to_string()).filter(|index| index != CRATES_IO_INDEX),
         },
         "sparse" => Source::Registry {
-            index: format!("sparse+{location}"),
+            index: Some(format!("sparse+{location}")),
         },
         _ => return None,
     };
@@ -211,9 +224,7 @@ mod tests {
         );
         assert_eq!(
             source_of("jarvis 0.0.1 (registry+https://github.com/rust-lang/crates.io-index)"),
-            Some(Source::Registry {
-                index: "https://github.com/rust-lang/crates.io-index".to_string()
-            })
+            Some(Source::Registry { index: None })
         );
         assert_eq!(source_of("jarvis 0.0.1 (elsewhere+somewhere)"), None);
     }
