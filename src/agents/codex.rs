@@ -66,6 +66,9 @@ impl Agent for Codex {
     }
 
     fn fixing_review_command(&self, run: &ReviewRun) -> Command {
+        if !codex_repo::is_trusted(run.env, run.repo) {
+            return self.review_command(run);
+        }
         let mut command = self.headless_command(run);
         for git_dir in &run.repo.git_dirs {
             command.arg("--add-dir").arg(git_dir);

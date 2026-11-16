@@ -164,8 +164,10 @@ agent session.
   so `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR` keeps the reviewer's shell in
   the repository.
 - **Fixing run, Codex.** It drops the read-only run's `--sandbox read-only`,
-  so Codex picks the sandbox: `workspace-write` in a repository the person
-  trusted, read-only in any other, whose `.codex/config.toml` it ignores.
+  so Codex picks the sandbox, which is `workspace-write` in a repository the
+  person trusted. Codex picks the same for a repository marked `untrusted`, so
+  jarvis only starts this run where the repository is trusted and keeps the
+  read-only one everywhere else.
   `workspace-write` keeps `.git` read-only, so the repository's git folders
   are passed with `--add-dir`; a linked worktree has two. A signing agent is
   reached over a socket, which the sandbox counts as network, so network

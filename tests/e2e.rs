@@ -430,3 +430,37 @@ fn repo_init_only_trusts_a_repository_when_told_to_and_leaves_every_other_settin
     assert!(sandbox.jarvis_in(&repo, &["repo", "init"]).status.success());
     assert_eq!(files.map(|file| fs::read(file).unwrap()), after_the_first_init);
 }
+
+#[test]
+fn codex_only_gets_a_run_that_can_fix_in_a_repository_it_trusts() {
+    let sandbox = Sandbox::new();
+    sandbox.install();
+    let repo = sandbox.repo_with_one_pushed_commit();
+    let codex = sandbox.fake_reviewer_dir().join("codex");
+    let codex_args = sandbox.fake_reviewer_dir().join("codex-args");
+    let codex_config = sandbox.home.join(".codex/config.toml");
+    let trust_level = |level: &str| format!("[projects.\"{}\"]\ntrust_level = \"{level}\"\n", repo.display());
+    fs::write(
+        &codex,
+        "#!/bin/sh\necho \"$@\" > \"$(dirname \"$0\")/codex-args\"\necho 'VERDICT: PASS'\n",
+    )
+    .unwrap();
+    fs::set_permissions(&codex, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(
+        sandbox.home.join(".jarvis/settings.toml"),
+        "[review]\nagent = \"codex\"\nfix = true\n",
+    )
+    .unwrap();
+
+    fs::write(&codex_config, trust_level("untrusted")).unwrap();
+    assert!(!sandbox.jarvis_in(&repo, &["repo", "init", "--yes"]).status.success());
+    assert_eq!(fs::read_to_string(&codex_config).unwrap(), trust_level("untrusted"));
+    sandbox.commit(&repo, "lib.rs", "fn main() {}\n");
+    assert!(sandbox.push(&repo).status.success());
+    assert!(fs::read_to_string(&codex_args).unwrap().contains("--sandbox read-only"));
+
+    fs::write(&codex_config, trust_level("trusted")).unwrap();
+    sandbox.commit(&repo, "more.rs", "fn more() {}\n");
+    assert!(sandbox.push(&repo).status.success());
+    assert!(!fs::read_to_string(&codex_args).unwrap().contains("--sandbox"));
+}

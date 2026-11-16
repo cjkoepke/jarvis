@@ -69,6 +69,7 @@ pub fn ask(reviewer: &Reviewer, env: &Env, outgoing: &Outgoing) -> Result<String
     let standards_dir = env.installed_standards_dir();
     let repo = Repo::current()?;
     let run = ReviewRun {
+        env,
         standards_dir: &standards_dir,
         repo: &repo,
         model: reviewer.model,

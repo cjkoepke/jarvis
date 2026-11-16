@@ -25,6 +25,7 @@ pub struct ReviewModel {
 }
 
 pub struct ReviewRun<'a> {
+    pub env: &'a Env,
     pub standards_dir: &'a Path,
     pub repo: &'a Repo,
     pub model: Option<&'a str>,

@@ -60,6 +60,10 @@ fn trust_where_undecided(env: &Env, repo: &Repo) -> Result<()> {
     files::replace(&file, &config.to_string())
 }
 
+pub fn is_trusted(env: &Env, repo: &Repo) -> bool {
+    read(&codex::config_file(env)).is_ok_and(|config| trust_of(&config, &deciding_folder(&config, repo)) == Trust::Trusted)
+}
+
 fn read(file: &Path) -> Result<DocumentMut> {
     let text = match file.exists() {
         true => fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?,
