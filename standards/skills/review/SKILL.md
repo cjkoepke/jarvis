@@ -40,7 +40,7 @@ Read every skill whose description bears on the commits. Before a push they are 
 1. Review only what the commits add or change, including their messages. Leave alone anything they did not touch.
 2. Report only violations you are sure of.
 3. Do not praise, summarise, or suggest improvements the standards do not ask for.
-4. Include a code quality coverage review and possible areas to refine, consolidate, or generally simplify on the assumption that you are a better model than whatever made the changes.
+4. Include a code quality coverage review and possible areas to refine, consolidate, or generally simplify on the assumption that you are a better model than whatever made the changes. What no standard asks for is a note, not a violation: you never fix a note, and notes never change the verdict.
 
 ## Fix
 
@@ -61,10 +61,12 @@ Otherwise change nothing.
 
 ## Reply
 
-List each violation as `<file>:<line>`, the standard it breaks, and what to change. For one you fixed, say what you changed instead.
+List each violation as `<file>:<line>`, the standard it breaks, and what to change. For one you fixed, say what you changed instead. For one you may fix and left unfixed, add why: the edit or command that was denied, with its error, or the reason the fix is not yours to make.
+
+List the notes after the violations, under a `Notes` heading.
 
 End with exactly one final line:
 
-- `VERDICT: PASS` when there are no violations.
+- `VERDICT: PASS` when there are no violations, with or without notes.
 - `VERDICT: FIXED` when you fixed and committed every violation.
 - `VERDICT: FAIL` otherwise.

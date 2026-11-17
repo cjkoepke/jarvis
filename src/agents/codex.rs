@@ -66,7 +66,7 @@ impl Agent for Codex {
     }
 
     fn fixing_review_command(&self, run: &ReviewRun) -> Command {
-        if !codex_repo::is_trusted(run.env, run.repo) {
+        if !self.fixing_run_may_write(run.env, run.repo) {
             return self.review_command(run);
         }
         let mut command = self.headless_command(run);
@@ -78,6 +78,10 @@ impl Agent for Codex {
         }
         command.arg(PROMPT_ON_STDIN);
         command
+    }
+
+    fn fixing_run_may_write(&self, env: &Env, repo: &Repo) -> bool {
+        codex_repo::is_trusted(env, repo)
     }
 
     fn fixing_requirements<'a>(&self, env: &'a Env, repo: &'a Repo) -> Vec<Requirement<'a>> {

@@ -1,8 +1,11 @@
 use crate::git::outgoing::{Outgoing, PushedRef};
+use crate::git::repo::Repo;
 use crate::paths::Env;
+use crate::review::fixes::{self, Fixing};
 use crate::review::refused::RefusedPushes;
+use crate::review::reviewer::{self, Request};
+use crate::review::transcript::Transcript;
 use crate::review::verdict::{self, Verdict};
-use crate::review::{fixes, reviewer};
 use crate::settings::Settings;
 use crate::standards::Standards;
 use crate::ui::{message, Tone};
@@ -23,6 +26,14 @@ struct Push {
 struct Refusal<'a> {
     refs: Vec<&'a PushedRef>,
     next_step: String,
+    transcript: Transcript,
+}
+
+struct Asked {
+    /// An error when the review was started and brought no verdict.
+    verdict: Result<Verdict>,
+    fixing: Fixing,
+    transcript: Transcript,
 }
 
 pub fn run(env: &Env, git_args: &[String]) -> ExitCode {
@@ -55,6 +66,7 @@ pub fn run(env: &Env, git_args: &[String]) -> ExitCode {
     };
     let next_step = format!("push refused. {} That push goes out without another review.", refusal.next_step);
     message::review_verdict(Tone::Bad, &next_step);
+    review_kept(&refusal.transcript);
     ExitCode::FAILURE
 }
 
@@ -73,6 +85,23 @@ impl Push {
 
 fn review_skipped(error: &anyhow::Error) {
     message::review_verdict(Tone::Caution, &format!("review skipped ({error:#}). The push continues."));
+}
+
+fn review_kept(transcript: &Transcript) {
+    let kept = format!("the whole review is kept in {}", transcript.dir().display());
+    message::review_verdict(Tone::Muted, &kept);
+}
+
+fn why_unfixed(fixing: Fixing) -> String {
+    let ruled_out_by = match fixing {
+        Fixing::Allowed => return "The reviewer was allowed to fix and left these unfixed.".to_string(),
+        Fixing::SwitchedOff => "`review.fix` is off",
+        Fixing::SeveralRefs => "the push sends more than one ref",
+        Fixing::RefNotCheckedOut => "the pushed ref is not the checked-out branch",
+        Fixing::UncommittedEdits => "tracked files have uncommitted edits",
+        Fixing::ReadOnlyAgent => "it may only read this repository, which `jarvis repo audit` explains",
+    };
+    format!("The reviewer could not fix: {ruled_out_by}.")
 }
 
 fn review<'a>(env: &Env, push: &'a Push, refused: &RefusedPushes) -> Result<Option<Refusal<'a>>> {
@@ -104,16 +133,25 @@ fn review<'a>(env: &Env, push: &'a Push, refused: &RefusedPushes) -> Result<Opti
     }
     let outgoing = Outgoing {
         remote: push.remote.clone(),
+        remote_name: (push.remote != push.remote_url).then(|| push.remote.clone()),
+        refs: unreviewed.iter().map(|pushed| pushed.remote_ref.clone()).collect(),
         commits,
     };
-    let next_step = match ask_reviewer(env, &unreviewed, &outgoing)? {
-        Verdict::Pass => return Ok(None),
-        Verdict::Fail => PUSHER_FIXES.to_string(),
-        Verdict::Fixed => next_step_after_fixes(&outgoing)?,
+    let asked = ask_reviewer(env, &unreviewed, &outgoing)?;
+    let next_step = match asked.verdict {
+        Ok(Verdict::Pass) => return Ok(None),
+        Ok(Verdict::Fail) => format!("{} {PUSHER_FIXES}", why_unfixed(asked.fixing)),
+        Ok(Verdict::Fixed) => next_step_after_fixes(&outgoing)?,
+        Err(error) => {
+            review_skipped(&error);
+            review_kept(&asked.transcript);
+            return Ok(None);
+        }
     };
     Ok(Some(Refusal {
         refs: unreviewed,
         next_step,
+        transcript: asked.transcript,
     }))
 }
 
@@ -125,18 +163,35 @@ fn next_step_after_fixes(outgoing: &Outgoing) -> Result<String> {
     })
 }
 
-fn ask_reviewer(env: &Env, unreviewed: &[&PushedRef], outgoing: &Outgoing) -> Result<Verdict> {
+fn ask_reviewer(env: &Env, unreviewed: &[&PushedRef], outgoing: &Outgoing) -> Result<Asked> {
     let standards = Standards::load(&env.installed_standards_dir())?;
     let settings = Settings::load(&env.settings_file())?;
+    let repo = Repo::current()?;
     let mut reviewer = reviewer::choose(&standards, &settings.review)?;
-    reviewer.may_fix = settings.review.fix && fixes::can_follow(unreviewed)?;
+    let agent_may_write = reviewer.agent.fixing_run_may_write(env, &repo);
+    reviewer.fixing = Fixing::decide(&settings.review, unreviewed, agent_may_write)?;
+    let transcript = Transcript::start(env)?;
     message::review_verdict(
         Tone::Muted,
         &format!("{reviewer} is reviewing the outgoing commits. This can take a few minutes."),
     );
 
-    let reply = reviewer::ask(&reviewer, env, outgoing)?;
-    let review = verdict::parse(&reply).context("the reviewer gave no verdict")?;
+    let request = Request {
+        env,
+        repo: &repo,
+        outgoing,
+        transcript: &transcript,
+    };
+    let verdict = reviewer::ask(&reviewer, &request).and_then(|reply| show_review(&reply));
+    Ok(Asked {
+        verdict,
+        fixing: reviewer.fixing,
+        transcript,
+    })
+}
+
+fn show_review(reply: &str) -> Result<Verdict> {
+    let review = verdict::parse(reply).context("the reviewer gave no verdict")?;
     message::review_findings(&review.findings);
     if let Verdict::Pass = review.verdict {
         message::review_verdict(Tone::Good, "review passed.");

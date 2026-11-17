@@ -142,6 +142,18 @@ impl Sandbox {
     fn remote_head(&self, repo: &Path) -> String {
         self.git_output(repo, &["rev-parse", "origin/main"])
     }
+
+    fn kept_review_of(&self, commit: &str) -> PathBuf {
+        let reviews = fs::read_dir(self.home.join(".jarvis/reviews")).unwrap();
+        let mut reviews = reviews.map(|review| review.unwrap().path());
+        reviews
+            .find(|review| read_json(&review.join("review.json"))["commits"][0] == commit)
+            .unwrap()
+    }
+
+    fn fixing_recorded_for(&self, commit: &str) -> Value {
+        read_json(&self.kept_review_of(commit).join("review.json"))["fixing"].clone()
+    }
 }
 
 fn read_json(path: &Path) -> Value {
@@ -350,6 +362,49 @@ fn a_reviewer_does_not_fix_a_push_of_refs_its_commits_would_not_follow() {
 }
 
 #[test]
+fn every_review_is_kept_with_what_ruled_out_a_fix() {
+    let sandbox = Sandbox::new();
+    sandbox.install();
+    let repo = sandbox.repo_with_one_pushed_commit();
+    let fixing_when_pushing = |file: &str, refs: &[&str]| {
+        sandbox.commit(&repo, file, "fn main() {}\n");
+        sandbox.git_output(&repo, &["branch", "--force", "topic"]);
+        assert!(sandbox.git(&repo, &[&["push", "origin"], refs].concat()).status.success());
+        sandbox.fixing_recorded_for(&sandbox.head(&repo))
+    };
+
+    assert_eq!(fixing_when_pushing("off.rs", &["main"]), "switched-off");
+    let kept = sandbox.kept_review_of(&sandbox.head(&repo));
+    assert_eq!(
+        fs::read_to_string(kept.join("prompt.md")).unwrap(),
+        sandbox.prompt_given_to_reviewer()
+    );
+    assert_eq!(fs::read_to_string(kept.join("reply.md")).unwrap(), "VERDICT: PASS");
+    assert_eq!(read_json(&kept.join("review.json"))["remote"], "origin");
+
+    fs::write(sandbox.home.join(".jarvis/settings.toml"), "[review]\nfix = true\n").unwrap();
+    assert_eq!(fixing_when_pushing("on.rs", &["main"]), "allowed");
+    assert_eq!(fixing_when_pushing("two.rs", &["main", "main:refs/heads/other"]), "several-refs");
+    assert_eq!(fixing_when_pushing("topic.rs", &["topic"]), "ref-not-checked-out");
+    fs::write(repo.join("README.md"), "an uncommitted edit\n").unwrap();
+    assert_eq!(fixing_when_pushing("dirty.rs", &["main"]), "uncommitted-edits");
+}
+
+#[test]
+fn review_metadata_omits_a_remote_given_as_a_url() {
+    let sandbox = Sandbox::new();
+    sandbox.install();
+    let repo = sandbox.repo_with_one_pushed_commit();
+    sandbox.commit(&repo, "direct.rs", "fn main() {}\n");
+    let remote = sandbox.home.join("remote.git");
+
+    assert!(sandbox.git(&repo, &["push", remote.to_str().unwrap(), "main"]).status.success());
+
+    let kept = sandbox.kept_review_of(&sandbox.head(&repo));
+    assert_eq!(read_json(&kept.join("review.json"))["remote"], Value::Null);
+}
+
+#[test]
 fn a_fixing_reviewer_finds_the_gpg_agent_started_when_the_repository_signs_commits() {
     let sandbox = Sandbox::new();
     sandbox.install();
@@ -520,6 +575,7 @@ fn codex_only_gets_a_run_that_can_fix_in_a_repository_it_trusts() {
     sandbox.commit(&repo, "lib.rs", "fn main() {}\n");
     assert!(sandbox.push(&repo).status.success());
     assert!(fs::read_to_string(&codex_args).unwrap().contains("--sandbox read-only"));
+    assert_eq!(sandbox.fixing_recorded_for(&sandbox.head(&repo)), "read-only-agent");
 
     fs::write(&codex_config, trust_level("trusted")).unwrap();
     sandbox.commit(&repo, "more.rs", "fn more() {}\n");
