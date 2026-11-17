@@ -24,7 +24,7 @@ pub fn run(env: &Env) -> Result<ExitCode> {
 
 /// A person's own standards stay, and with them the folder that holds them.
 fn remove_what_jarvis_wrote_for_itself(env: &Env) -> Result<()> {
-    for folder in [env.installed_standards_dir(), env.next_standards_dir()] {
+    for folder in [env.installed_standards_dir(), env.next_standards_dir(), env.reviews_dir()] {
         if folder.exists() {
             fs::remove_dir_all(folder)?;
         }

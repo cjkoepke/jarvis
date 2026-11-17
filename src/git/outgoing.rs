@@ -38,9 +38,13 @@ impl PushedRef {
     }
 }
 
-/// The tip of each pushed ref that has commits the remote lacks.
+/// The pushed refs that have commits the remote lacks, by their name on the remote, and
+/// the tip of each.
 pub struct Outgoing {
     pub remote: String,
+    /// `None` for a push to a URL, which names no configured remote.
+    pub remote_name: Option<String>,
+    pub refs: Vec<String>,
     pub commits: Vec<String>,
 }
 

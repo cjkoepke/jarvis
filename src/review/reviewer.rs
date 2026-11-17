@@ -1,3 +1,5 @@
+use super::fixes::Fixing;
+use super::transcript::{Subject, Transcript};
 use crate::agents::{self, Agent, ReviewRun};
 use crate::files::find_on_path;
 use crate::git::{outgoing::Outgoing, repo::Repo};
@@ -23,9 +25,16 @@ const FIX_VARIABLE: &str = "JARVIS_REVIEW_FIX";
 pub struct Reviewer<'a> {
     pub agent: &'static dyn Agent,
     pub model: Option<&'a str>,
-    pub may_fix: bool,
+    pub fixing: Fixing,
     core: &'a str,
     skill: &'a Skill,
+}
+
+pub struct Request<'a> {
+    pub env: &'a Env,
+    pub repo: &'a Repo,
+    pub outgoing: &'a Outgoing,
+    pub transcript: &'a Transcript,
 }
 
 impl fmt::Display for Reviewer<'_> {
@@ -50,31 +59,42 @@ pub fn choose<'a>(standards: &'a Standards, settings: &'a ReviewSettings) -> Res
     Ok(Reviewer {
         agent,
         model: settings.model.as_deref(),
-        may_fix: false,
+        fixing: Fixing::SwitchedOff,
         core: &standards.core,
         skill,
     })
 }
 
-pub fn ask(reviewer: &Reviewer, env: &Env, outgoing: &Outgoing) -> Result<String> {
+pub fn ask(reviewer: &Reviewer, request: &Request) -> Result<String> {
+    let Request {
+        env,
+        repo,
+        outgoing,
+        transcript,
+    } = *request;
     let agent = reviewer.agent;
-    let scratch = tempfile::tempdir()?;
-    let prompt_file = scratch.path().join("prompt.md");
-    let reply_file = scratch.path().join("reply.md");
-    let errors_file = scratch.path().join("errors.log");
+    let may_fix = reviewer.fixing.is_allowed();
+    transcript.record(&Subject {
+        repository: &repo.root,
+        remote: outgoing.remote_name.as_deref(),
+        refs: &outgoing.refs,
+        commits: &outgoing.commits,
+        agent: agent.id(),
+        model: reviewer.model,
+        fixing: reviewer.fixing,
+    })?;
     let skill_file = reviewer.skill.file();
     let skill = fs::read_to_string(&skill_file).with_context(|| format!("reading {}", skill_file.display()))?;
-    fs::write(&prompt_file, format!("{}\n\n{skill}", reviewer.core))?;
+    fs::write(transcript.prompt_file(), format!("{}\n\n{skill}", reviewer.core))?;
 
     let standards_dir = env.installed_standards_dir();
-    let repo = Repo::current()?;
     let run = ReviewRun {
         env,
         standards_dir: &standards_dir,
-        repo: &repo,
+        repo,
         model: reviewer.model,
     };
-    let mut command = if reviewer.may_fix {
+    let mut command = if may_fix {
         repo.start_signing_agent();
         agent.fixing_review_command(&run)
     } else {
@@ -82,21 +102,21 @@ pub fn ask(reviewer: &Reviewer, env: &Env, outgoing: &Outgoing) -> Result<String
     };
     command
         .env(STANDARDS_VARIABLE, &standards_dir)
-        .env(FIX_VARIABLE, reviewer.may_fix.to_string())
+        .env(FIX_VARIABLE, may_fix.to_string())
         .env(REMOTE_VARIABLE, &outgoing.remote)
         .env(COMMITS_VARIABLE, outgoing.commits.join(" "))
-        .stdin(File::open(&prompt_file)?)
-        .stdout(File::create(&reply_file)?)
-        .stderr(File::create(&errors_file)?);
+        .stdin(File::open(transcript.prompt_file())?)
+        .stdout(File::create(transcript.reply_file())?)
+        .stderr(File::create(transcript.errors_file())?);
     let mut process = command.spawn().with_context(|| format!("starting {}", agent.display_name()))?;
 
     let status = wait_within_time_limit(&mut process)?;
     if !status.success() {
-        let errors = fs::read_to_string(&errors_file).unwrap_or_default();
+        let errors = fs::read_to_string(transcript.errors_file()).unwrap_or_default();
         let last_error = errors.lines().rev().find(|line| !line.trim().is_empty()).unwrap_or_default();
         bail!("{} stopped with {status}: {last_error}", agent.display_name());
     }
-    Ok(fs::read_to_string(&reply_file)?)
+    Ok(fs::read_to_string(transcript.reply_file())?)
 }
 
 fn wait_within_time_limit(reviewer: &mut Child) -> Result<ExitStatus> {

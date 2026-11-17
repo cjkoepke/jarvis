@@ -50,6 +50,11 @@ impl Env {
         self.jarvis_dir().join("refused-pushes.json")
     }
 
+    /// One folder per review, holding what the reviewer was asked and what came back.
+    pub fn reviews_dir(&self) -> PathBuf {
+        self.jarvis_dir().join("reviews")
+    }
+
     pub fn install_record_file(&self) -> PathBuf {
         self.jarvis_dir().join("install.json")
     }

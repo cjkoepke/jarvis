@@ -53,6 +53,12 @@ pub trait Agent: Sync {
     /// own agent settings decide whether it may edit files and commit them.
     fn fixing_review_command(&self, run: &ReviewRun) -> Command;
 
+    /// Whether a fixing run could change anything in `repo`. False only where the agent
+    /// rules that out before the run starts.
+    fn fixing_run_may_write(&self, _env: &Env, _repo: &Repo) -> bool {
+        true
+    }
+
     /// What this agent's own settings must hold before a fixing reviewer may edit and
     /// commit in `repo`.
     fn fixing_requirements<'a>(&self, env: &'a Env, repo: &'a Repo) -> Vec<Requirement<'a>>;

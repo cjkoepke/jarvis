@@ -63,7 +63,9 @@ agent session.
   and the push after that is reviewed again. With `review.fix` on, the
   reviewer fixes what it finds and commits the fixes on top, where the
   repository's agent settings let it; that push is still refused, and the next
-  attempt sends them.
+  attempt sends them. A refusal says whether the reviewer could fix and, when
+  it could not, what ruled that out. Every review is kept in
+  `~/.jarvis/reviews`, and a refused or skipped one prints its folder.
 - **`status`** shows checks on the standards, each agent's hooks and skills,
   the git hook and the reviewer. `--format json` prints the same for an agent.
   It only reports, and each failed row says how to fix it.
@@ -136,6 +138,20 @@ agent session.
   checked-out branch or `HEAD` itself, with no uncommitted edits to tracked
   files; any other push gets the read-only review. `VERDICT: FIXED` is
   only believed when `HEAD` gained commits on top of the pushed one.
+- **Kept reviews.** The terminal only shows a review's findings, and the push
+  after a refusal is not reviewed, so what a reviewer did has to outlast its
+  run. Each review gets a folder in `~/.jarvis/reviews`, named by the time it
+  started: `prompt.md`, `reply.md`, the agent's stderr in `errors.log`, and
+  `review.json` with the repository, remote, refs, commits, agent, model and
+  whether it could fix. A remote given as a URL is left out of `review.json`,
+  because a URL can hold a token. Only the newest 20 stay, which covers
+  looking into a recent push and bounds the folder. Codex prints its whole
+  run to stderr, commands and denials included, so its session stays
+  `--ephemeral` and out of the person's own session list.
+- **Why a push was not fixed.** `Fixing` names the one thing that ruled a fix
+  out: the setting, the refs pushed, uncommitted edits, or an agent that would
+  only get a read-only run. Once the reviewer may fix, only it knows why it
+  did not, so the review skill has it say so for each violation it leaves.
 - **Fixing permissions.** A review grants a fixing reviewer nothing. The
   permission to edit and commit comes from each agent's own settings for the
   repository, so each repository decides what its reviewer may do. Both agents
@@ -345,7 +361,7 @@ or `VERDICT: FAIL`. jarvis reads only that line.
 | `src/agents/` | One file per agent, one per agent's model catalog and one per agent's settings for a repository, plus hook-file editing, skill copying and status checks. |
 | `src/check/` | The check type, its table and JSON output, the report `status` and `repo audit` print, and a check paired with its remedy. |
 | `src/ui/` | The colour palette and styled messages every command prints through. `prompt/` holds the keyboard-driven picker, checklist and text input. |
-| `src/review/` | Running the reviewer, reading its verdict, counting its fix commits and remembering refused pushes. |
+| `src/review/` | Running the reviewer, keeping its transcript, reading its verdict, deciding whether it may fix, counting its fix commits and remembering refused pushes. |
 | `src/git/` | Git hook registration, finding the pushed commits the remote lacks, and what an agent working in the repository needs to know about it. |
 | `src/standards/` | Loading a standards folder, where an install takes its standards from, and laying a person's own over them. |
 | `src/origin/` | Telling whether Homebrew or cargo installed the binary, and the upgrade each one runs. |
@@ -363,6 +379,11 @@ To add a setting, add its field in `src/settings.rs` and a `Setting` variant in
 ## Not built yet
 
 - The reviewer cannot fix a commit message: it only adds commits.
+- A kept review of Claude Code holds its reply and errors only. Claude Code
+  prints nothing else in a `--print` run, so the commands it ran and the ones
+  denied are not kept.
+- A kept review is not scrubbed. A push to a URL that carries a token leaves
+  the token in `errors.log` wherever the reviewer printed the remote.
 - `repo audit` compares rules by their spelling, so it asks for the ones
   `repo init` writes even where a broader rule already allows the same. It
   does not look for what would still stop a fix: a Claude Code `deny` rule, or
