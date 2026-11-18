@@ -6,6 +6,16 @@ use std::process::{Command, Output};
 use tempfile::TempDir;
 
 const STANDARDS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/standards");
+const FAKE_BREW: &str = r#"#!/bin/sh
+PATH=/usr/bin:/bin
+programs="${0%/*}"
+case "$1" in
+    install) printf '#!/bin/sh\n' > "$programs/ast-grep" && chmod 755 "$programs/ast-grep" ;;
+    uninstall) rm "$programs/ast-grep" ;;
+    *) exit 1 ;;
+esac
+echo "$1" >> "$programs/brew-runs"
+"#;
 const FAKE_REVIEWER: &str = r#"#!/bin/sh
 dir="$(dirname "$0")"
 cat > "$dir/prompt"
@@ -30,56 +40,78 @@ impl Sandbox {
         fs::create_dir_all(&home).unwrap();
         let sandbox = Sandbox { _dir: dir, home };
         sandbox.install_fake_reviewer();
+        sandbox.stand_in_for_machine_programs();
         sandbox
     }
 
-    fn fake_reviewer_dir(&self) -> PathBuf {
-        self.home.join("reviewer")
+    fn fake_programs_dir(&self) -> PathBuf {
+        self.home.join("programs")
     }
 
     fn install_fake_reviewer(&self) {
-        let dir = self.fake_reviewer_dir();
-        let executable = dir.join("claude");
-        fs::create_dir_all(&dir).unwrap();
-        fs::write(&executable, FAKE_REVIEWER).unwrap();
-        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
+        fs::create_dir_all(self.fake_programs_dir()).unwrap();
+        self.write_program("claude", FAKE_REVIEWER);
         self.reviewer_replies("VERDICT: PASS");
     }
 
+    fn stand_in_for_machine_programs(&self) {
+        let inherited = std::env::var_os("PATH").unwrap_or_default();
+        let real_git = std::env::split_paths(&inherited)
+            .map(|dir| dir.join("git"))
+            .find(|git| git.is_file())
+            .expect("the tests need git on PATH");
+        symlink(real_git, self.fake_programs_dir().join("git")).unwrap();
+        self.write_program("ast-grep", "#!/bin/sh\n");
+    }
+
+    /// Returns the file the fake brew lists its installs and uninstalls in, one verb per line.
+    fn fake_brew(&self) -> PathBuf {
+        self.write_program("brew", FAKE_BREW);
+        self.fake_programs_dir().join("brew-runs")
+    }
+
+    fn write_program(&self, name: &str, script: &str) {
+        let executable = self.fake_programs_dir().join(name);
+        fs::write(&executable, script).unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
     fn reviewer_replies(&self, reply: &str) {
-        fs::write(self.fake_reviewer_dir().join("reply"), reply).unwrap();
+        fs::write(self.fake_programs_dir().join("reply"), reply).unwrap();
     }
 
     fn reviewer_commits_a_fix(&self) {
-        fs::write(self.fake_reviewer_dir().join("fix"), "fn fixed() {}\n").unwrap();
+        fs::write(self.fake_programs_dir().join("fix"), "fn fixed() {}\n").unwrap();
     }
 
     fn prompt_given_to_reviewer(&self) -> String {
-        fs::read_to_string(self.fake_reviewer_dir().join("prompt")).unwrap()
+        fs::read_to_string(self.fake_programs_dir().join("prompt")).unwrap()
     }
 
     fn commits_the_reviewer_found(&self) -> String {
-        fs::read_to_string(self.fake_reviewer_dir().join("commits")).unwrap()
+        fs::read_to_string(self.fake_programs_dir().join("commits")).unwrap()
     }
 
-    fn path_with_fake_reviewer_first(&self) -> std::ffi::OsString {
+    fn path_with_fake_programs_first(&self) -> std::ffi::OsString {
         let inherited = std::env::var_os("PATH").unwrap_or_default();
-        let dirs = std::iter::once(self.fake_reviewer_dir()).chain(std::env::split_paths(&inherited));
+        let dirs = std::iter::once(self.fake_programs_dir()).chain(std::env::split_paths(&inherited));
         std::env::join_paths(dirs).unwrap()
     }
 
+    fn with_only_the_fake_programs<'a>(&self, command: &'a mut Command) -> &'a mut Command {
+        command.env("PATH", self.fake_programs_dir())
+    }
+
     fn jarvis(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_jarvis"))
-            .arg("--home")
-            .arg(&self.home)
-            .args(args)
-            .output()
-            .unwrap()
+        let mut jarvis = Command::new(env!("CARGO_BIN_EXE_jarvis"));
+        jarvis.arg("--home").arg(&self.home).args(args);
+        self.with_only_the_fake_programs(&mut jarvis).output().unwrap()
     }
 
     fn jarvis_in(&self, repo: &Path, args: &[&str]) -> Output {
         let mut jarvis = Command::new(env!("CARGO_BIN_EXE_jarvis"));
         jarvis.current_dir(repo).arg("--home").arg(&self.home).args(args);
+        self.with_only_the_fake_programs(&mut jarvis);
         self.with_only_the_sandbox_git_config(&mut jarvis).output().unwrap()
     }
 
@@ -99,7 +131,7 @@ impl Sandbox {
         let mut git = Command::new("git");
         git.current_dir(cwd).args(args);
         self.with_only_the_sandbox_git_config(&mut git)
-            .env("PATH", self.path_with_fake_reviewer_first())
+            .env("PATH", self.path_with_fake_programs_first())
             .env("GIT_AUTHOR_NAME", "Test")
             .env("GIT_AUTHOR_EMAIL", "test@example.com")
             .env("GIT_COMMITTER_NAME", "Test")
@@ -170,7 +202,9 @@ fn registered_hooks_deliver_the_core_to_sessions_and_subagents() {
         let config = read_json(&sandbox.home.join(hooks_file));
         for event in ["SessionStart", "SubagentStart"] {
             let registered_command = config["hooks"][event][0]["hooks"][0]["command"].as_str().unwrap();
-            let reply = Command::new("sh").arg("-c").arg(registered_command).output().unwrap();
+            let mut hook = Command::new("/bin/sh");
+            hook.arg("-c").arg(registered_command);
+            let reply = sandbox.with_only_the_fake_programs(&mut hook).output().unwrap();
             let reply: Value = serde_json::from_slice(&reply.stdout).unwrap();
 
             assert_eq!(reply["hookSpecificOutput"]["hookEventName"], event);
@@ -188,6 +222,7 @@ fn install_and_uninstall_leave_existing_configuration_alone() {
     let settings = sandbox.home.join(".claude/settings.json");
     let own_skill = sandbox.home.join(".claude/skills/commenting/SKILL.md");
     let gitconfig = sandbox.home.join(".gitconfig");
+    let brew_runs = sandbox.fake_brew();
     let settings_before = r#"{"model":"opus","hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo mine"}]}]}}"#;
     fs::create_dir_all(own_skill.parent().unwrap()).unwrap();
     fs::write(&own_skill, "mine\n").unwrap();
@@ -216,6 +251,24 @@ fn install_and_uninstall_leave_existing_configuration_alone() {
     assert!(!sandbox.home.join(".codex/hooks.json").exists());
     assert!(!sandbox.home.join(".agents/skills/commenting").exists());
     assert!(!sandbox.home.join(".jarvis").exists());
+    assert!(!brew_runs.exists());
+}
+
+#[test]
+fn an_ast_grep_an_install_put_in_place_outlasts_a_reinstall_and_leaves_with_uninstall() {
+    let sandbox = Sandbox::new();
+    let ast_grep = sandbox.fake_programs_dir().join("ast-grep");
+    fs::remove_file(&ast_grep).unwrap();
+    let brew_runs = sandbox.fake_brew();
+
+    sandbox.install();
+    sandbox.install();
+    assert!(ast_grep.is_file());
+    assert_eq!(fs::read_to_string(&brew_runs).unwrap(), "install\n");
+
+    assert!(sandbox.jarvis(&["uninstall"]).status.success());
+    assert_eq!(fs::read_to_string(&brew_runs).unwrap(), "install\nuninstall\n");
+    assert!(!ast_grep.exists());
 }
 
 #[test]
@@ -243,8 +296,8 @@ fn settings_in_the_jarvis_folder_choose_the_reviewer_and_outlast_an_install() {
     sandbox.install();
     let repo = sandbox.repo_with_one_pushed_commit();
     let settings = sandbox.home.join(".jarvis/settings.toml");
-    let codex = sandbox.fake_reviewer_dir().join("codex");
-    let codex_ran = sandbox.fake_reviewer_dir().join("codex-ran");
+    let codex = sandbox.fake_programs_dir().join("codex");
+    let codex_ran = sandbox.fake_programs_dir().join("codex-ran");
     fs::write(&codex, "#!/bin/sh\ntouch \"$(dirname \"$0\")/codex-ran\"\necho 'VERDICT: PASS'\n").unwrap();
     fs::set_permissions(&codex, fs::Permissions::from_mode(0o755)).unwrap();
     fs::write(&settings, "[review]\nagent = \"codex\"\n").unwrap();
@@ -285,7 +338,7 @@ fn a_refused_push_goes_out_unreviewed_on_the_next_attempt_and_the_review_returns
     let sandbox = Sandbox::new();
     sandbox.install();
     let repo = sandbox.repo_with_one_pushed_commit();
-    let prompt = sandbox.fake_reviewer_dir().join("prompt");
+    let prompt = sandbox.fake_programs_dir().join("prompt");
     sandbox.reviewer_replies("lib.rs:1 breaks a standard\nVERDICT: FAIL");
 
     sandbox.commit(&repo, "lib.rs", "fn main() {}\n");
@@ -309,7 +362,7 @@ fn a_refusal_is_spent_by_any_push_of_that_ref_that_is_let_through() {
     let sandbox = Sandbox::new();
     sandbox.install();
     let repo = sandbox.repo_with_one_pushed_commit();
-    let prompt = sandbox.fake_reviewer_dir().join("prompt");
+    let prompt = sandbox.fake_programs_dir().join("prompt");
     sandbox.reviewer_replies("VERDICT: FAIL");
     let push_topic = |refspec: &str| sandbox.git(&repo, &["push", "origin", refspec]).status.success();
 
@@ -409,8 +462,8 @@ fn a_fixing_reviewer_finds_the_gpg_agent_started_when_the_repository_signs_commi
     let sandbox = Sandbox::new();
     sandbox.install();
     fs::write(sandbox.home.join(".jarvis/settings.toml"), "[review]\nfix = true\n").unwrap();
-    let fake_gpgconf = sandbox.fake_reviewer_dir().join("gpgconf");
-    let gpgconf_args = sandbox.fake_reviewer_dir().join("gpgconf-args");
+    let fake_gpgconf = sandbox.fake_programs_dir().join("gpgconf");
+    let gpgconf_args = sandbox.fake_programs_dir().join("gpgconf-args");
     fs::write(&fake_gpgconf, "#!/bin/sh\necho \"$@\" > \"$(dirname \"$0\")/gpgconf-args\"\n").unwrap();
     fs::set_permissions(&fake_gpgconf, fs::Permissions::from_mode(0o755)).unwrap();
     let repo = sandbox.repo_with_one_pushed_commit();
@@ -434,6 +487,7 @@ fn install_falls_back_to_the_packaged_standards_when_the_last_folder_is_gone() {
 
     assert!(sandbox.jarvis(&["install"]).status.success());
     assert!(read_json(&record_file)["standards_source"].is_null());
+    assert_eq!(read_json(&record_file)["agent_ids"], serde_json::json!(["claude"]));
     assert!(sandbox.home.join(".jarvis/standards/skills/review/SKILL.md").is_file());
 }
 
@@ -553,8 +607,8 @@ fn codex_only_gets_a_run_that_can_fix_in_a_repository_it_trusts() {
     let sandbox = Sandbox::new();
     sandbox.install();
     let repo = sandbox.repo_with_one_pushed_commit();
-    let codex = sandbox.fake_reviewer_dir().join("codex");
-    let codex_args = sandbox.fake_reviewer_dir().join("codex-args");
+    let codex = sandbox.fake_programs_dir().join("codex");
+    let codex_args = sandbox.fake_programs_dir().join("codex-args");
     let codex_config = sandbox.home.join(".codex/config.toml");
     let trust_level = |level: &str| format!("[projects.\"{}\"]\ntrust_level = \"{level}\"\n", repo.display());
     fs::write(
@@ -597,11 +651,12 @@ fn update_upgrades_through_homebrew_and_registers_the_path_that_outlasts_an_upgr
     fs::write(keg.join("INSTALL_RECEIPT.json"), r#"{"source":{"tap":"someone/tap"}}"#).unwrap();
     symlink(&keg, homebrew.join("opt/jarvis")).unwrap();
     symlink(keg.join("bin/jarvis"), homebrew.join("bin/jarvis")).unwrap();
-    fs::write(&brew, "#!/bin/sh\necho \"$@\" > \"$(dirname \"$0\")/brew-args\"\n").unwrap();
+    fs::write(&brew, "#!/bin/sh\necho \"$@\" > \"${0%/*}/brew-args\"\n").unwrap();
     fs::set_permissions(&brew, fs::Permissions::from_mode(0o755)).unwrap();
 
     let mut update = Command::new(homebrew.join("bin/jarvis"));
     update.arg("--home").arg(&sandbox.home).arg("update");
+    sandbox.with_only_the_fake_programs(&mut update);
     let updated = sandbox.with_only_the_sandbox_git_config(&mut update).output().unwrap();
 
     assert!(updated.status.success(), "{}", String::from_utf8_lossy(&updated.stderr));

@@ -17,13 +17,13 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Cmd {
-    #[command(about = "Copy the standards, register the agent hooks and the git pre-push review.")]
+    #[command(about = "Copy the standards, register the agent hooks and the git pre-push review, and install ast-grep if it is missing.")]
     Install(InstallArgs),
     #[command(about = "Bring jarvis up to date with the tool that installed it, then set everything up again.")]
     Update,
     #[command(about = "Remove everything `install` added and nothing else.")]
     Uninstall,
-    #[command(about = "Show whether the standards, agent hooks, skills and git review are in place.")]
+    #[command(about = "Show whether the standards, agent hooks, skills, git review and ast-grep are in place.")]
     Status {
         #[arg(long, value_enum, default_value_t = Format::Table, help = "`table` for a person, `json` for an agent.")]
         format: Format,

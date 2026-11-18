@@ -29,6 +29,17 @@ Without `--home`, `install` and `uninstall` act on the real home directory:
 `~/.claude.json`, `~/.codex/config.toml` and the `.claude/settings.json` of the
 repository it is run in, so try it in a throwaway repository as well.
 
+`install` also installs ast-grep when `ast-grep` is not on `PATH`. A package
+manager puts it on the whole machine, whatever `--home` says, and that home's
+`uninstall` removes it again. Where it is missing, put a stand-in first on
+`PATH` for a try-out:
+
+```sh
+mkdir -p /tmp/jarvis-bin
+printf '#!/bin/sh\n' > /tmp/jarvis-bin/ast-grep && chmod +x /tmp/jarvis-bin/ast-grep
+PATH=/tmp/jarvis-bin:$PATH target/debug/jarvis --home /tmp/jarvis-home install
+```
+
 `jarvis settings` needs a terminal, and so do the questions `repo init` and
 `repo audit` ask, so drive them through a pseudo-terminal to try them from an
 agent session.
@@ -45,7 +56,11 @@ agent session.
   folder is gone it goes back to the packaged standards, as `--packaged` does.
   A folder inside `~/.jarvis` is refused, because an install would then read
   what it wrote. Skills an earlier install delivered that the standards no
-  longer hold are removed from each agent.
+  longer hold are removed from each agent. When `ast-grep` is not on `PATH`,
+  it installs it with Homebrew, or with cargo where there is no Homebrew, and
+  keeps which one did in `install.json`. When neither can, the install still
+  finishes and says so. A copy the package manager has off `PATH` is left as
+  it is.
 - **`clone`** copies core files or skills from those standards into
   `~/.jarvis/custom`, for the person to change. It takes their names, or
   offers a list to tick in a terminal, and leaves alone what is already there.
@@ -67,7 +82,7 @@ agent session.
   it could not, what ruled that out. Every review is kept in
   `~/.jarvis/reviews`, and a refused or skipped one prints its folder.
 - **`status`** shows checks on the standards, each agent's hooks and skills,
-  the git hook and the reviewer. `--format json` prints the same for an agent.
+  the git hook, the reviewer and ast-grep. `--format json` prints the same for an agent.
   It only reports, and each failed row says how to fix it.
 - **`settings`** opens a keyboard-driven screen for the machine's defaults and
   saves each change as it is made.
@@ -88,15 +103,20 @@ agent session.
   only reports.
 - **`uninstall`** removes everything `install` added and nothing else. What
   `repo init` wrote stays: those are each agent's own settings for a repository.
-  So does `~/.jarvis/custom`, which is the person's.
+  So does `~/.jarvis/custom`, which is the person's. An ast-grep an install
+  put on the machine is removed with the same package manager. One that was
+  there before stays, and a removal that fails is only a note.
 
 ## Rules that must hold
 
 - `hook` and `pre-push` exit 0 on their own failures. jarvis is never the
   reason a session or a push breaks, and a review that cannot run lets the
   push through.
-- `install` and `uninstall` leave configuration they did not write alone.
-- Every path hangs off `Env::home`, so `--home` moves a whole install.
+- `install` and `uninstall` leave alone the configuration they did not write
+  and the programs they did not install.
+- Every path hangs off `Env::home`, so `--home` moves a whole install. The one
+  exception is ast-grep, which a package manager installs for the whole
+  machine.
 - Claude Code and Codex stay at parity. A capability added for one agent is
   added for the other in the same change.
 - Nothing is ever written to the standards source folder. A machine that got
@@ -243,12 +263,44 @@ agent session.
 - **Install order.** The standards are put together in `~/.jarvis/standards.next`
   and loaded there before they take the place of the installed ones, so a
   broken source or custom folder never replaces a working install.
+- **ast-grep.** The packaged coding skill has agents search code with
+  ast-grep, so every install makes sure it is on `PATH`, whatever standards it
+  installs. jarvis looks for `ast-grep` and not its alias `sg`, which ast-grep
+  is retiring and which is a group command on Linux
+  (https://ast-grep.github.io/guide/quick-start.html). Homebrew comes before
+  cargo because it pours a prebuilt binary where cargo compiles for minutes.
+  Each is only looked for on `PATH`, and a failure is not retried with the
+  other: what stops one, such as no network, mostly stops both. cargo is told
+  to build `ast-grep` alone, because the crate's `sg` would hide the Linux
+  command. A missing
+  ast-grep never fails an install, because the standards and the review work
+  without it; `status` fails its row instead.
+- **Whose ast-grep it is.** A copy the package manager already has is the
+  person's, also when it is off `PATH`: an unlinked formula, or a cargo folder
+  that `PATH` leaves out. Installing over it would upgrade it, and could then
+  claim it, so jarvis asks the package manager first and leaves such a copy
+  as it is. An install claims ast-grep only when it was not on `PATH` before
+  the package manager ran and is afterwards. `install.json` is rewritten by
+  every install, so the claims are carried over from the last one, and they
+  are a list: a later install can run where `PATH` only has the other tool.
+  The record is saved once before the package manager starts, so an
+  interrupted compile still leaves a whole install on record. `uninstall`
+  looks on `PATH` again before it says ast-grep is gone: Homebrew reports
+  success for a pinned formula it left in place. Homebrew runs with
+  `HOMEBREW_NO_AUTOREMOVE` and `HOMEBREW_NO_INSTALL_CLEANUP`, so it removes
+  and cleans up no other formula, and neither tool is given a terminal to ask
+  on.
 - **Settings screen.** `Screen` restores raw mode and line wrapping when
   dropped. Wrapping is off while it is open because a wrapped line would make
   the block taller than the redraw expects.
 - **Tests.** `tests/e2e.rs` has its own sandbox because no crate gives a
   throwaway home together with a git whose global config lives in it. Every git
   call goes through `git()` so the real user and system config are never read.
+  Every jarvis run a test starts gets a `PATH` holding only the sandbox's fake
+  programs and a link to the real git, so no test can reach a real package
+  manager, on a machine that has one or not. `git()` keeps the inherited
+  `PATH`: the fake reviewer needs the system's tools, and the only jarvis git
+  starts is `pre-push`, which installs nothing.
 
 ## Settings
 
@@ -365,6 +417,7 @@ or `VERDICT: FAIL`. jarvis reads only that line.
 | `src/git/` | Git hook registration, finding the pushed commits the remote lacks, and what an agent working in the repository needs to know about it. |
 | `src/standards/` | Loading a standards folder, where an install takes its standards from, and laying a person's own over them. |
 | `src/origin/` | Telling whether Homebrew or cargo installed the binary, and the upgrade each one runs. |
+| `src/ast_grep.rs` | Finding `ast-grep` on `PATH`, and the Homebrew and cargo commands that install and remove it. |
 | `build.rs` | Has cargo rebuild when `standards/` changes. |
 | `src/settings.rs` | Reading and writing `~/.jarvis/settings.toml`. |
 | `tests/e2e.rs` | Whole-command tests in a throwaway home with a fake reviewer. |
@@ -402,3 +455,17 @@ To add a setting, add its field in `src/settings.rs` and a `Setting` variant in
   then Codex skips them and sessions start without the standards.
 - `status` cannot tell when Codex wants a changed hook approved again; it still
   reports the hook as approved.
+- ast-grep comes only from Homebrew or cargo. On a machine with neither,
+  `install` says so and leaves installing it to the person.
+- An ast-grep cargo installed into a folder that is not on `PATH` is not
+  claimed, so `uninstall` leaves it.
+- With two homes on one machine, the `uninstall` of the home that installed
+  ast-grep removes it for the other as well, until that one's next `install`.
+- A Claude Code reviewer cannot search with ast-grep. Its read-only run only
+  allows the `git` commands and `printenv`, and allowing `ast-grep` would also
+  allow its rewrites. Codex's read-only sandbox runs it.
+- Homebrew's ast-grep comes with `sg`, which on Linux hides the group command
+  of that name until `uninstall`.
+- Where Homebrew installs other formulae for ast-grep, as it does on Linux
+  with an old glibc, `uninstall` leaves those.
+- The coding skill pipes ast-grep's output into `jq`, which nothing installs.

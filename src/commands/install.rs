@@ -1,4 +1,5 @@
 use crate::agents::{self, hooks_file, skills, Agent, Approval};
+use crate::ast_grep::{self, Action, PackageManager};
 use crate::cli::InstallArgs;
 use crate::git::hook_config;
 use crate::paths::Env;
@@ -39,13 +40,27 @@ pub fn run(env: &Env, args: &InstallArgs) -> Result<ExitCode> {
     message::done("git", &format!("pre-push review in {}", env.global_gitconfig().display()));
 
     let agent_ids = agents.iter().map(|agent| agent.id().to_string()).collect();
-    InstallRecord {
+    let mut record = InstallRecord {
         standards_source: source.folder().map(Path::to_path_buf),
         agent_ids,
+        ast_grep_installed_by: previous.map(|record| record.ast_grep_installed_by).unwrap_or_default(),
+    };
+    record.save(env)?;
+    if let Some(manager) = provide_ast_grep(env) {
+        if !record.ast_grep_installed_by.contains(&manager) {
+            record.ast_grep_installed_by.push(manager);
+        }
+        record.save(env)?;
     }
-    .save(env)?;
 
-    message::summary(Tone::Good, "Installed. Run `jarvis status` to check it.");
+    if ast_grep::on_path().is_some() {
+        message::summary(Tone::Good, "Installed. Run `jarvis status` to check it.");
+    } else {
+        message::summary(
+            Tone::Caution,
+            "Installed, except ast-grep, which the coding skill searches code with. Run `jarvis status` to check it.",
+        );
+    }
     Ok(ExitCode::SUCCESS)
 }
 
@@ -122,6 +137,50 @@ fn install_for_agent(agent: &dyn Agent, env: &Env, standards: &Standards) -> Res
         message::note(next_step);
     }
     Ok(())
+}
+
+/// The package manager that put ast-grep on PATH in this run. An ast-grep that was there
+/// before is never claimed, on PATH or off it, and neither is one that did not reach PATH.
+fn provide_ast_grep(env: &Env) -> Option<PackageManager> {
+    if let Some(found) = ast_grep::on_path() {
+        message::done("ast-grep", &found.display().to_string());
+        return None;
+    }
+    let Some(manager) = PackageManager::first_on_path() else {
+        message::caution(
+            "ast-grep",
+            "not on PATH, and neither Homebrew nor cargo is there to install it; see https://ast-grep.github.io/guide/quick-start.html",
+        );
+        return None;
+    };
+    if manager.holds_ast_grep() {
+        message::caution(
+            "ast-grep",
+            &format!("not on PATH, though {manager} has a copy; jarvis leaves that one as it is, so put it on PATH yourself"),
+        );
+        return None;
+    }
+
+    message::caution(
+        "ast-grep",
+        &format!("not on PATH; running `{}`", manager.command_line(Action::Install)),
+    );
+    if let Err(error) = manager.run(Action::Install, &env.home) {
+        message::note(&format!("{error:#}; the next `jarvis install` tries again"));
+        return None;
+    }
+    match ast_grep::on_path() {
+        Some(installed) => {
+            message::done("ast-grep", &format!("installed with {manager} at {}", installed.display()));
+            Some(manager)
+        }
+        None => {
+            message::note(&format!(
+                "{manager} finished, but `ast-grep` is still not on PATH; add the folder {manager} installs programs into"
+            ));
+            None
+        }
+    }
 }
 
 fn remove_unselected_agents(env: &Env, selected: &[&dyn Agent], previous: Option<&InstallRecord>) -> Result<()> {

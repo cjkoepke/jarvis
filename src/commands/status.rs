@@ -1,4 +1,5 @@
 use crate::agents;
+use crate::ast_grep;
 use crate::check::{self, Check, CheckSubject};
 use crate::cli::Format;
 use crate::files::same_contents;
@@ -32,6 +33,10 @@ const GIT_REVIEWER: CheckSubject = CheckSubject {
     area: "Git",
     name: "reviewer",
 };
+const AST_GREP: CheckSubject = CheckSubject {
+    area: "ast-grep",
+    name: "binary",
+};
 
 pub fn run(env: &Env, format: Format) -> Result<ExitCode> {
     check::report::print(&gather(env), format)
@@ -40,9 +45,10 @@ pub fn run(env: &Env, format: Format) -> Result<ExitCode> {
 fn gather(env: &Env) -> Vec<Check> {
     let mut checks = Vec::new();
     let standards = Standards::load(&env.installed_standards_dir());
-    match (InstallRecord::load(env), &standards) {
+    let record = InstallRecord::load(env);
+    match (&record, &standards) {
         (Some(record), Ok(standards)) => {
-            checks.push(standards_check(env, &record, standards));
+            checks.push(standards_check(env, record, standards));
             checks.push(custom_check(env));
             for agent in record.agent_ids.iter().filter_map(|id| agents::by_id(id)) {
                 checks.extend(agents::checks::run(agent, env, standards));
@@ -56,6 +62,7 @@ fn gather(env: &Env) -> Vec<Check> {
     if let Ok(standards) = &standards {
         checks.push(git_reviewer_check(env, standards));
     }
+    checks.push(ast_grep_check(record.as_ref()));
     checks
 }
 
@@ -133,6 +140,25 @@ fn git_review_check(env: &Env) -> Check {
         )),
         Registration::SwitchedOff => GIT_REVIEW.warn(format!("switched off by `hook.jarvis.enabled` in {}", gitconfig.display())),
     }
+}
+
+fn ast_grep_check(record: Option<&InstallRecord>) -> Check {
+    let Some(found) = ast_grep::on_path() else {
+        return AST_GREP.fail("`ast-grep` is not on PATH, and the coding skill searches code with it; run `jarvis install`");
+    };
+    let installed_by: Vec<String> = record
+        .iter()
+        .flat_map(|record| &record.ast_grep_installed_by)
+        .map(ToString::to_string)
+        .collect();
+    if installed_by.is_empty() {
+        return AST_GREP.ok(found.display().to_string());
+    }
+    AST_GREP.ok(format!(
+        "{}, installed by jarvis with {}",
+        found.display(),
+        installed_by.join(" and ")
+    ))
 }
 
 fn git_reviewer_check(env: &Env, standards: &Standards) -> Check {

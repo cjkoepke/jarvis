@@ -8,6 +8,11 @@ pub fn done(subject: &str, detail: &str) {
     println!("{} {subject} {detail}", Tone::Good.paint("✓"));
 }
 
+pub fn caution(subject: &str, detail: &str) {
+    let subject = Tone::Strong.paint(&format!("{subject:<SUBJECT_WIDTH$}"));
+    println!("{} {subject} {detail}", Tone::Caution.paint("!"));
+}
+
 pub fn note(text: &str) {
     let indent = " ".repeat(SUBJECT_WIDTH + 2);
     println!("{indent} {} {}", Tone::Caution.paint("!"), Tone::Muted.paint(text));

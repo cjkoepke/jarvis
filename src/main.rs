@@ -1,4 +1,5 @@
 mod agents;
+mod ast_grep;
 mod check;
 mod cli;
 mod commands;

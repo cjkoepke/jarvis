@@ -54,14 +54,15 @@ jarvis has opinions of two kinds. Five are built into the tool:
 - **Add nothing.** Agents get your standards as written, with no prompt text of
   jarvis's own.
 - **Break nothing.** jarvis's own failures never break a session or block a
-  push, and it leaves alone the configuration it did not write.
+  push, and it leaves alone the configuration it did not write and the
+  programs it did not install.
 
 The rest are the packaged standards, one always-on core and four skills:
 
 | Piece | What it holds an agent to |
 | --- | --- |
 | [`core/core.md`](standards/core/core.md) | **How it talks to you.** Short, signal over noise. Ask a question only when the answer improves the outcome by a substantial margin. Make a long answer easy to scan. State intent, not a list of what was done. |
-| [`skills/coding`](standards/skills/coding/SKILL.md) | **Code a human engineer understands easily.** Separate concerns. Past three arguments, prefer a struct, record or object. No comment that says what the code already says. Test only the logic you introduced, never pin copy, mock API calls. |
+| [`skills/coding`](standards/skills/coding/SKILL.md) | **Code a human engineer understands easily.** Separate concerns. Past three arguments, prefer a struct, record or object. No comment that says what the code already says. Test only the logic you introduced, never pin copy, mock API calls. Search code with ast-grep. |
 | [`skills/github`](standards/skills/github/SKILL.md) | **Intent, not output.** A pull request describes its intent and opens as a draft. Conventional Commits, one focused change each, terse messages. No commit before you have reviewed the work, no pull request unless you ask. |
 | [`skills/orchestration`](standards/skills/orchestration/SKILL.md) | **Your token limits come first.** Offer cost tiers before starting sub-agents, start them only for a short list of jobs, and review their code before accepting it. |
 | [`skills/review`](standards/skills/review/SKILL.md) | **Only violations the reviewer is sure of.** It judges what the commits add or change, messages included, against the standards and nothing else. No praise, no summary. Code-quality remarks are notes, which never refuse a push. |
@@ -94,11 +95,16 @@ You need:
 - **A Rust toolchain on a Unix-like system.** jarvis is at version 0.0.1 with
   no release build yet, so you build it from source.
 
+The packaged coding skill searches code with
+[ast-grep](https://ast-grep.github.io). When `ast-grep` is not on your `PATH`,
+`install` installs it with Homebrew, or with cargo where you have no Homebrew,
+which compiles it for a few minutes.
+
 ```sh
 git clone https://github.com/cjkoepke/jarvis.git
 cd jarvis
 cargo install --locked --path .
-jarvis install   # machine-wide: standards, agent hooks, skills, pre-push review
+jarvis install   # machine-wide: standards, agent hooks, skills, pre-push review, ast-grep
 jarvis status    # what is in place, and how to fix what is not
 ```
 
@@ -114,18 +120,18 @@ is reviewed. If you use Codex, do two things first:
 
 | Command | What it does |
 | --- | --- |
-| `jarvis install` | Copy the standards, register the agent hooks and the git pre-push review. Run it again after your standards change: a bare run reuses the standards folder and agents of the last install, and the first uses the packaged standards and both agents. |
+| `jarvis install` | Copy the standards, register the agent hooks and the git pre-push review, and install ast-grep if it is missing. Run it again after your standards change: a bare run reuses the standards folder and agents of the last install, and the first uses the packaged standards and both agents. |
 | `jarvis install --standards <folder>` | Use a folder holding `core/` and `skills/` in place of the packaged standards. |
 | `jarvis install --packaged` | Go back to the standards packaged with jarvis after an install from a folder. Cannot be combined with `--standards`. |
 | `jarvis install --agents <list>` | Set up only the agents you list, comma-separated: `claude`, `codex`. One you leave out loses its jarvis hooks and skills. |
-| `jarvis status` | Show whether the standards, agent hooks, skills and git review are in place. It changes nothing, each failed row says how to fix it, and it exits non-zero when a check fails. `--format json` prints the same for an agent. |
+| `jarvis status` | Show whether the standards, agent hooks, skills, git review and ast-grep are in place. It changes nothing, each failed row says how to fix it, and it exits non-zero when a check fails. `--format json` prints the same for an agent. |
 | `jarvis clone [PIECES]...` | Copy core files or skills from the standards in effect into `~/.jarvis/custom`, to change them there. Name them, such as `skills/review` or `core/core.md`, or tick them from a list. |
 | `jarvis settings` | Choose defaults such as the pre-push reviewer with the arrow keys: the reviewer, its model, and whether it fixes what it finds. |
 | `jarvis repo init` | Trust this repository in each agent and give a fixing reviewer the permissions it needs. It asks first, unless you pass `--yes`. Both apply to every session of those agents there, not only the review. |
 | `jarvis repo audit` | Show whether each agent lets a fixing reviewer edit and commit in this repository, and offer to fix what is missing. Takes `--format json` too, and exits non-zero when a check fails. |
 | `jarvis update` | Bring jarvis up to date with the tool that installed it, then set everything up again. Today that tool is cargo, and a checkout is rebuilt as it is, so pull there first. |
-| `jarvis uninstall` | Remove jarvis's hooks, skills and git hook, and its own data in `~/.jarvis`. Your own configuration, `~/.jarvis/custom`, what `repo init` wrote and the binary stay. |
-| `--home <dir>` | On any command: the home directory to install into and read from, `$HOME` by default. An existing throwaway folder shows everything an install writes. |
+| `jarvis uninstall` | Remove jarvis's hooks, skills and git hook, and its own data in `~/.jarvis`. Your own configuration, `~/.jarvis/custom`, what `repo init` wrote and the binary stay. ast-grep goes only when `install` put it there, with the package manager that did. |
+| `--home <dir>` | On any command: the home directory to install into and read from, `$HOME` by default. An existing throwaway folder shows everything an install writes, but a missing ast-grep is still installed for the whole machine. |
 
 `jarvis settings` writes `~/.jarvis/settings.toml`. You can edit it by hand:
 

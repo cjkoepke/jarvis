@@ -1,3 +1,4 @@
+use crate::ast_grep::PackageManager;
 use crate::paths::Env;
 use crate::standards::source::Source;
 use anyhow::{Context, Result};
@@ -11,6 +12,10 @@ pub struct InstallRecord {
     #[serde(default)]
     pub standards_source: Option<PathBuf>,
     pub agent_ids: Vec<String>,
+    /// Every package manager an install put ast-grep on the machine with, which `uninstall`
+    /// removes it with. Empty when ast-grep was already there.
+    #[serde(default)]
+    pub ast_grep_installed_by: Vec<PackageManager>,
 }
 
 impl InstallRecord {

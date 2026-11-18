@@ -25,3 +25,59 @@ description: use whenever you begin to write any sort of code
 - _Never_ write tests that enforce a UI pattern, except for when that UI pattern employs critical logic, such as a swap ratio output.
 - Only write test harnesses when a third-party testing library is insufficient.
 - Never write a test that makes an api call, these should be mocked.
+
+## Searching & Mapping
+
+**MANDATORY**: Use ast-grep for ALL code searches
+
+NEVER use `grep`, `rg`, `find`, or `glob` for searching code.
+ALWAYS use `ast-grep` for code searches.
+
+1. First, get locations only:
+
+```bash
+   ast-grep -p 'pattern' --json | jq -r '.[] | "\(.file):\(.range.start.line)"'
+```
+
+2. Then read only the relevant sections:
+
+```bash
+   sed -n '45,60p' src/services/user.ts
+```
+
+### ast-grep Examples
+
+```bash
+# Find function/method by name
+ast-grep -p 'function $NAME($$$) { $$$ }'
+
+# Find TypeScript async functions
+ast-grep -p 'async function $NAME($$$): $RET { $$$ }'
+
+# Find React useState hooks
+ast-grep -p 'const [$STATE, $SETTER] = useState($$$)'
+
+# Find class definitions
+ast-grep -p 'class $NAME { $$$ }'
+
+# Find imports from a module
+ast-grep -p 'import { $$$ } from "react"'
+
+# Find all calls to a function
+ast-grep -p '$FN($$$)' -r 'functionName'
+
+# Search specific file types
+ast-grep -p 'pattern' --lang typescript
+```
+
+### Pattern Syntax
+
+- `$NAME` - single AST node (identifier, expression, etc.)
+- `$$$` - zero or more nodes (spread)
+- `$_` - wildcard (matches anything, don't capture)
+
+### When to Use What
+
+- **ast-grep**: Finding code patterns, functions, classes, imports, usages
+- **cat/view**: Reading a specific known file
+- **ls**: Listing directory contents
