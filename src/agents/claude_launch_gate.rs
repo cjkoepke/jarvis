@@ -14,6 +14,10 @@ pub const HOOK: HookEvent = HookEvent {
 
 const ASK_FOR_A_TIER: &str = "No tier is picked for starting agents. Load the `orchestration` skill, then ask the owner with \
 AskUserQuestion which tier to use, one option per tier, each label starting with the tier's name:";
+const ASK_FOR_A_TYPED_TIER: &str =
+    "No tier is picked for starting agents. Load the `orchestration` skill, show the owner these tiers and ask them to reply with the name of one:";
+/// AskUserQuestion offers two to four options (https://code.claude.com/docs/en/agent-sdk/user-input#question-format).
+const QUESTION_OPTIONS: std::ops::RangeInclusive<usize> = 2..=4;
 const HOW_LONG_IT_HOLDS: &str = "Their pick lets agents start until their next message.";
 
 #[derive(Deserialize)]
@@ -39,10 +43,10 @@ pub fn hold(hook_input: &str, tiers: &[Tier]) -> Result<Option<String>> {
 
 fn denial(tiers: &[Tier]) -> String {
     let options: Vec<String> = tiers.iter().map(|tier| format!("- {}", tier.line)).collect();
-    let instruction = if (2..=4).contains(&tiers.len()) {
+    let instruction = if QUESTION_OPTIONS.contains(&tiers.len()) {
         ASK_FOR_A_TIER
     } else {
-        "Load the `orchestration` skill, show the tiers below, and ask the owner to reply with the name of their choice:"
+        ASK_FOR_A_TYPED_TIER
     };
     let reason = format!("{instruction}\n{}\n{HOW_LONG_IT_HOLDS}", options.join("\n"));
     json!({

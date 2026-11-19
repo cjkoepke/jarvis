@@ -133,17 +133,18 @@ agent session.
 - **Orchestration tier.** A skill only loads when the model chooses to, so a
   hook makes the tier question one the model cannot skip. The pick is read from
   the session transcript Claude Code keeps, so the model cannot approve itself
-  as it could with a file of its own. The owner can select a tier in an
-  `AskUserQuestion` that offers the tiers, or type a prompt that opens with
-  its name or calls it a tier. When the tier count falls outside the tool's
-  range of two to four choices, the hook asks for a typed choice.
-  Background notifications and messages from other agents preserve the current turn. A call carrying `agent_id` comes from
-  a subagent or teammate, which has no owner to ask and needed a pick to
+  as it could with a file of its own. The owner picks either by choosing a
+  tier in an `AskUserQuestion` that offers every tier, or by typing a prompt
+  that opens with a tier's name or calls it a tier. Where the tiers do not
+  fit the tool's two to four options, the refusal asks for a typed pick.
+  Only a typed prompt starts a new turn: background notifications and
+  messages from other agents keep the pick. A call carrying `agent_id` comes
+  from a subagent or teammate, which has no owner to ask and needed a pick to
   start, so it goes through. The tiers are the indented `Name: description`
   items of the `orchestration` skill, and without any there is no gate.
-  Claude Code's transcript format is undocumented. The hook uses the prompt
-  origin and matches each answer to its question and options. Claude Code only for now: Codex's
-  hooks and session logs work differently.
+  Claude Code's transcript format is undocumented, so the hook reads only a
+  prompt's `origin` and an answer's question, options and choice. Claude Code
+  only for now: Codex's hooks and session logs work differently.
   (https://code.claude.com/docs/en/hooks)
 - **Core cap.** Claude Code drops hook context longer than 10,000 characters
   (https://code.claude.com/docs/en/hooks). The cap is 6,000 because a core
