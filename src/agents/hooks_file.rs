@@ -1,5 +1,5 @@
 use super::json_config::{self, Config};
-use super::{hook_command, hook_subcommand, Agent};
+use super::{hook_command, hook_events, hook_subcommand, Agent};
 use crate::paths::Env;
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
@@ -17,13 +17,16 @@ pub fn register(agent: &dyn Agent, env: &Env) -> Result<()> {
     let hooks = hooks
         .as_object_mut()
         .with_context(|| format!("`hooks` in {} is not an object", path.display()))?;
-    for event in agent.context_events() {
-        let groups = hooks.entry(*event).or_insert_with(|| json!([]));
+    for event in hook_events(agent) {
+        let groups = hooks.entry(event.name).or_insert_with(|| json!([]));
         let groups = groups
             .as_array_mut()
-            .with_context(|| format!("`hooks.{event}` in {} is not a list", path.display()))?;
-        let handler = json!({ "type": "command", "command": hook_command(agent, env, event), "statusMessage": TITLE });
-        groups.push(json!({ "hooks": [handler] }));
+            .with_context(|| format!("`hooks.{}` in {} is not a list", event.name, path.display()))?;
+        let handler = json!({ "type": "command", "command": hook_command(agent, env, event.name), "statusMessage": TITLE });
+        groups.push(match event.matcher {
+            Some(matcher) => json!({ "matcher": matcher, "hooks": [handler] }),
+            None => json!({ "hooks": [handler] }),
+        });
     }
     json_config::write(&path, &config)
 }
@@ -54,7 +57,7 @@ pub struct RegisteredHook {
 pub fn registered(agent: &dyn Agent, env: &Env) -> Vec<RegisteredHook> {
     let config = json_config::read(&agent.hooks_file(env)).unwrap_or_default();
     let mut registered = Vec::new();
-    for event in agent.context_events().iter().copied() {
+    for event in hook_events(agent).into_iter().map(|event| event.name) {
         let subcommand = hook_subcommand(agent, event);
         let groups = config.get("hooks").and_then(|hooks| hooks.get(event)).and_then(Value::as_array);
         for (group_index, group) in groups.into_iter().flatten().enumerate() {

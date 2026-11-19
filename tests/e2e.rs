@@ -1,8 +1,9 @@
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::fs;
+use std::io::Write;
 use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 use tempfile::TempDir;
 
 const STANDARDS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/standards");
@@ -127,6 +128,15 @@ impl Sandbox {
         assert!(self.jarvis(&["install", "--standards", STANDARDS]).status.success());
     }
 
+    /// Runs a hook command the way the agent does, with `input` on stdin.
+    fn run_hook(&self, command: &str, input: &Value) -> Output {
+        let mut hook = Command::new("/bin/sh");
+        hook.arg("-c").arg(command).stdin(Stdio::piped()).stdout(Stdio::piped());
+        let mut running = self.with_only_the_fake_programs(&mut hook).spawn().unwrap();
+        running.stdin.take().unwrap().write_all(input.to_string().as_bytes()).unwrap();
+        running.wait_with_output().unwrap()
+    }
+
     fn git(&self, cwd: &Path, args: &[&str]) -> Output {
         let mut git = Command::new("git");
         git.current_dir(cwd).args(args);
@@ -192,6 +202,23 @@ fn read_json(path: &Path) -> Value {
     serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
 }
 
+fn append_line(file: &Path, entry: Value) {
+    let mut file = fs::OpenOptions::new().create(true).append(true).open(file).unwrap();
+    writeln!(file, "{entry}").unwrap();
+}
+
+fn typed_prompt(text: &str) -> Value {
+    json!({ "type": "user", "origin": { "kind": "human" }, "message": { "role": "user", "content": text } })
+}
+
+fn answered_question(answer: &str) -> Value {
+    json!({
+        "type": "user",
+        "message": { "role": "user", "content": [{ "type": "tool_result", "tool_use_id": "t1", "content": "answered" }] },
+        "toolUseResult": { "questions": [{ "question": "Which tier?" }], "answers": { "Which tier?": answer } }
+    })
+}
+
 #[test]
 fn registered_hooks_deliver_the_core_to_sessions_and_subagents() {
     let sandbox = Sandbox::new();
@@ -217,13 +244,67 @@ fn registered_hooks_deliver_the_core_to_sessions_and_subagents() {
 }
 
 #[test]
+fn starting_agents_waits_until_the_owner_picks_a_tier_the_standards_offer() {
+    let sandbox = Sandbox::new();
+    let standards = sandbox.home.join("standards");
+    fs::create_dir_all(standards.join("core")).unwrap();
+    fs::create_dir_all(standards.join("skills/orchestration")).unwrap();
+    fs::write(standards.join("core/core.md"), "Be brief.\n").unwrap();
+    fs::write(
+        standards.join("skills/orchestration/SKILL.md"),
+        "- Offer these options:\n  - Thrifty: one agent.\n  - Lavish: ten agents.\n",
+    )
+    .unwrap();
+    assert!(sandbox
+        .jarvis(&["install", "--standards", standards.to_str().unwrap()])
+        .status
+        .success());
+
+    let gate = &read_json(&sandbox.home.join(".claude/settings.json"))["hooks"]["PreToolUse"][0];
+    let gated_tools: Vec<&str> = gate["matcher"].as_str().unwrap().split('|').collect();
+    assert!(gated_tools.contains(&"Agent") && gated_tools.contains(&"Workflow"));
+    let transcript = sandbox.home.join("session.jsonl");
+    let launch = |agent_id: Option<&str>| {
+        let input = json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Agent",
+            "transcript_path": transcript,
+            "agent_id": agent_id,
+        });
+        let reply = sandbox.run_hook(gate["hooks"][0]["command"].as_str().unwrap(), &input);
+        assert!(reply.status.success());
+        let reply: Option<Value> = serde_json::from_slice(&reply.stdout).ok();
+        reply.map(|reply| {
+            assert_eq!(reply["hookSpecificOutput"]["permissionDecision"], "deny");
+            reply["hookSpecificOutput"]["permissionDecisionReason"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        })
+    };
+
+    append_line(&transcript, typed_prompt("research this with a few agents"));
+    let reason = launch(None).unwrap();
+    assert!(reason.contains("Thrifty: one agent.") && reason.contains("Lavish: ten agents."));
+    assert_eq!(launch(Some("subagent")), None);
+
+    append_line(&transcript, answered_question("Thrifty (Recommended)"));
+    assert_eq!(launch(None), None);
+
+    append_line(&transcript, typed_prompt("now something else"));
+    assert!(launch(None).is_some());
+    append_line(&transcript, typed_prompt("lavish, go"));
+    assert_eq!(launch(None), None);
+}
+
+#[test]
 fn install_and_uninstall_leave_existing_configuration_alone() {
     let sandbox = Sandbox::new();
     let settings = sandbox.home.join(".claude/settings.json");
     let own_skill = sandbox.home.join(".claude/skills/commenting/SKILL.md");
     let gitconfig = sandbox.home.join(".gitconfig");
     let brew_runs = sandbox.fake_brew();
-    let settings_before = r#"{"model":"opus","hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo mine"}]}]}}"#;
+    let settings_before = r#"{"model":"opus","hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo mine"}]}],"PreToolUse":[{"matcher":"Agent","hooks":[{"type":"command","command":"echo mine"}]}]}}"#;
     fs::create_dir_all(own_skill.parent().unwrap()).unwrap();
     fs::write(&own_skill, "mine\n").unwrap();
     fs::write(&settings, settings_before).unwrap();
@@ -235,6 +316,8 @@ fn install_and_uninstall_leave_existing_configuration_alone() {
     assert_eq!(installed["hooks"]["SessionStart"].as_array().unwrap().len(), 2);
     assert_eq!(installed["hooks"]["SessionStart"][0]["hooks"][0]["command"], "echo mine");
     assert_eq!(installed["hooks"]["SubagentStart"].as_array().unwrap().len(), 1);
+    assert_eq!(installed["hooks"]["PreToolUse"].as_array().unwrap().len(), 2);
+    assert_eq!(installed["hooks"]["PreToolUse"][0]["hooks"][0]["command"], "echo mine");
     assert_eq!(fs::read_to_string(&own_skill).unwrap(), "mine\n");
 
     assert!(sandbox.jarvis(&["install", "--agents", "claude"]).status.success());

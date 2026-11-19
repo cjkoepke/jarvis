@@ -29,6 +29,9 @@ outside the model and checks the work against them:
 - **The same start for every session.** When a session or a sub-agent starts, a
   hook hands Claude Code and Codex the same core: the short part that is always
   in context. Both get the same skills for the rest, whichever model they run.
+- **A tier before agents.** In Claude Code, a hook holds back starting
+  subagents and workflows until you pick one of the tiers your orchestration
+  skill offers. Your pick lasts until your next message.
 - **A review at `git push`.** An agent reads your outgoing commits against the
   same standards, and a violation refuses the push, whatever wrote them: Claude
   Code, Codex, another tool or you.
@@ -52,7 +55,7 @@ jarvis has opinions of two kinds. Five are built into the tool:
 - **Load the rest on demand.** Procedures are skills, which stay out of context
   until a task calls for them.
 - **Add nothing.** Agents get your standards as written, with no prompt text of
-  jarvis's own.
+  jarvis's own beyond the two lines that ask for a tier.
 - **Break nothing.** jarvis's own failures never break a session or block a
   push, and it leaves alone the configuration it did not write and the
   programs it did not install.

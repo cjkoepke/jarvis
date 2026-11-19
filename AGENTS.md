@@ -47,7 +47,8 @@ agent session.
 ## What each command does
 
 - **`install`** writes the standards to `~/.jarvis/standards`, registers
-  `SessionStart` and `SubagentStart` hooks for Claude Code and Codex, copies
+  `SessionStart` and `SubagentStart` hooks for Claude Code and Codex and a
+  `PreToolUse` hook for Claude Code's `Agent` and `Workflow` tools, copies
   the skills to where each agent looks for them, and adds a `pre-push` hook to
   the global git config (Git 2.54 or newer). The standards are the ones
   packaged in the binary, or those of a folder named with `--standards`, with
@@ -68,7 +69,10 @@ agent session.
   install the newest one, then runs that binary's `install`. A binary cargo
   built from a checkout is rebuilt from that checkout as it is; pulling newer
   commits there stays with the person.
-- **`hook`** is what the agent hooks run. It replies with the core.
+- **`hook`** is what the agent hooks run. It replies with the core, except to
+  `PreToolUse`: there it refuses to start agents from the main conversation
+  until the owner has picked one of the `orchestration` skill's tiers since
+  their last prompt, and lists the tiers in the refusal.
 - **`pre-push`** is what the git hook runs. It starts the headless agent the
   settings name with the `review` skill. Claude Code may only read files and
   run `git log`, `git show`, `git diff` and `printenv`; Codex runs in its
@@ -126,6 +130,19 @@ agent session.
 
 ## Why it is built this way
 
+- **Orchestration tier.** A skill only loads when the model chooses to, so a
+  hook makes the tier question one the model cannot skip. The pick is read from
+  the session transcript Claude Code keeps, so the model cannot approve itself
+  as it could with a file of its own: an answer to `AskUserQuestion`, or a
+  typed prompt that opens with a tier's name or calls it a tier. Background task notifications and messages from other agents do
+  not count and do not start a new turn. A call carrying `agent_id` comes from
+  a subagent or teammate, which has no owner to ask and needed a pick to
+  start, so it goes through. The tiers are the indented `Name: description`
+  items of the `orchestration` skill, and without any there is no gate.
+  Claude Code's transcript format is not documented, so this reads only
+  `origin.kind` and `toolUseResult.answers`. Claude Code only for now: Codex's
+  hooks and session logs work differently.
+  (https://code.claude.com/docs/en/hooks)
 - **Core cap.** Claude Code drops hook context longer than 10,000 characters
   (https://code.claude.com/docs/en/hooks). The cap is 6,000 because a core
   that long stops being followed.
@@ -382,10 +399,12 @@ out of date until the next `jarvis install`.
 
 ## Prompts
 
-jarvis writes no prompt text of its own. Every agent gets the standards as they
-are written:
+jarvis writes no prompt text of its own beyond the two lines that frame the
+tiers when it holds back an agent launch. Every agent gets the standards as
+they are written:
 
 - Session and sub-agent hooks send the core, with nothing around it.
+- A held-back agent launch gets the tier items of the `orchestration` skill.
 - The pre-push reviewer gets the core followed by the `review` skill, as a
   session would after loading that skill. It gathers the commits, the diff and
   the other skills itself, with the commands the skill shows.

@@ -1,8 +1,10 @@
 pub mod checks;
 mod claude;
+mod claude_launch_gate;
 mod claude_models;
 mod claude_repo;
 mod claude_repo_trust;
+mod claude_transcript;
 mod codex;
 mod codex_models;
 mod codex_repo;
@@ -14,10 +16,18 @@ pub mod skills;
 use crate::check::requirement::Requirement;
 use crate::git::repo::Repo;
 use crate::paths::Env;
+use crate::standards::tiers::Tier;
 use anyhow::{Context, Result};
 use serde_json::json;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// An event jarvis registers a hook for, and for a tool event the tools it is for, in the
+/// agent's own matcher syntax.
+pub struct HookEvent {
+    pub name: &'static str,
+    pub matcher: Option<&'static str>,
+}
 
 pub struct ReviewModel {
     pub name: String,
@@ -44,6 +54,18 @@ pub trait Agent: Sync {
     fn hooks_file(&self, env: &Env) -> PathBuf;
     fn skills_dir(&self, env: &Env) -> PathBuf;
     fn context_events(&self) -> &'static [&'static str];
+
+    /// The hook that holds back the tools which start agents until the owner picks an
+    /// orchestration tier, where the agent has one.
+    fn launch_gate(&self) -> Option<HookEvent> {
+        None
+    }
+
+    /// The launch gate's reply to `hook_input` when it holds the launch back. `None` leaves the
+    /// call to the agent's own permissions.
+    fn hold_launch(&self, _hook_input: &str, _tiers: &[Tier]) -> Result<Option<String>> {
+        Ok(None)
+    }
 
     /// A headless run that cannot change files, reads the prompt on stdin and prints
     /// only its reply. It must be able to read `standards_dir`.
@@ -91,6 +113,11 @@ pub fn chosen(ids: &[String]) -> Result<Vec<&'static dyn Agent>> {
     ids.iter()
         .map(|id| by_id(id).with_context(|| format!("unknown agent `{id}`; known agents: {}", known_ids.join(", "))))
         .collect()
+}
+
+pub fn hook_events(agent: &dyn Agent) -> Vec<HookEvent> {
+    let context_events = agent.context_events().iter().map(|&name| HookEvent { name, matcher: None });
+    context_events.chain(agent.launch_gate()).collect()
 }
 
 pub fn hook_subcommand(agent: &dyn Agent, event: &str) -> String {
