@@ -57,16 +57,22 @@ pub struct RegisteredHook {
 pub fn registered(agent: &dyn Agent, env: &Env) -> Vec<RegisteredHook> {
     let config = json_config::read(&agent.hooks_file(env)).unwrap_or_default();
     let mut registered = Vec::new();
-    for event in hook_events(agent).into_iter().map(|event| event.name) {
-        let subcommand = hook_subcommand(agent, event);
-        let groups = config.get("hooks").and_then(|hooks| hooks.get(event)).and_then(Value::as_array);
+    for event in hook_events(agent) {
+        let subcommand = hook_subcommand(agent, event.name);
+        let groups = config
+            .get("hooks")
+            .and_then(|hooks| hooks.get(event.name))
+            .and_then(Value::as_array);
         for (group_index, group) in groups.into_iter().flatten().enumerate() {
+            if event.matcher.is_some_and(|matcher| group["matcher"] != matcher) {
+                continue;
+            }
             let handlers = group.get("hooks").and_then(Value::as_array);
             for (handler_index, handler) in handlers.into_iter().flatten().enumerate() {
                 let executable = command_of(handler).and_then(|command| env.executable_in(command, &subcommand));
                 if let Some(executable) = executable {
                     registered.push(RegisteredHook {
-                        event,
+                        event: event.name,
                         group_index,
                         handler_index,
                         executable,

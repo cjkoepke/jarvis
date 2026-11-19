@@ -1,4 +1,4 @@
-use super::claude_transcript::{self, OwnerTurn};
+use super::claude_transcript;
 use super::HookEvent;
 use crate::standards::tiers::Tier;
 use anyhow::Result;
@@ -31,23 +31,20 @@ pub fn hold(hook_input: &str, tiers: &[Tier]) -> Result<Option<String>> {
     if tiers.is_empty() || input.agent_id.is_some() {
         return Ok(None);
     }
-    let turn = claude_transcript::owner_turn(&input.transcript_path)?;
-    if picks_a_tier(&turn, tiers) {
+    if claude_transcript::has_tier_pick(&input.transcript_path, tiers)? {
         return Ok(None);
     }
     Ok(Some(denial(tiers)))
 }
 
-fn picks_a_tier(turn: &OwnerTurn, tiers: &[Tier]) -> bool {
-    tiers.iter().any(|tier| {
-        let in_prompt = turn.prompt.as_deref().is_some_and(|prompt| tier.is_named_in_prompt(prompt));
-        in_prompt || turn.answers.iter().any(|answer| tier.is_named_in_answer(answer))
-    })
-}
-
 fn denial(tiers: &[Tier]) -> String {
     let options: Vec<String> = tiers.iter().map(|tier| format!("- {}", tier.line)).collect();
-    let reason = format!("{ASK_FOR_A_TIER}\n{}\n{HOW_LONG_IT_HOLDS}", options.join("\n"));
+    let instruction = if (2..=4).contains(&tiers.len()) {
+        ASK_FOR_A_TIER
+    } else {
+        "Load the `orchestration` skill, show the tiers below, and ask the owner to reply with the name of their choice:"
+    };
+    let reason = format!("{instruction}\n{}\n{HOW_LONG_IT_HOLDS}", options.join("\n"));
     json!({
         "hookSpecificOutput": {
             "hookEventName": HOOK.name,

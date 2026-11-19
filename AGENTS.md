@@ -133,14 +133,16 @@ agent session.
 - **Orchestration tier.** A skill only loads when the model chooses to, so a
   hook makes the tier question one the model cannot skip. The pick is read from
   the session transcript Claude Code keeps, so the model cannot approve itself
-  as it could with a file of its own: an answer to `AskUserQuestion`, or a
-  typed prompt that opens with a tier's name or calls it a tier. Background task notifications and messages from other agents do
-  not count and do not start a new turn. A call carrying `agent_id` comes from
+  as it could with a file of its own. The owner can select a tier in an
+  `AskUserQuestion` that offers the tiers, or type a prompt that opens with
+  its name or calls it a tier. When the tier count falls outside the tool's
+  range of two to four choices, the hook asks for a typed choice.
+  Background notifications and messages from other agents preserve the current turn. A call carrying `agent_id` comes from
   a subagent or teammate, which has no owner to ask and needed a pick to
   start, so it goes through. The tiers are the indented `Name: description`
   items of the `orchestration` skill, and without any there is no gate.
-  Claude Code's transcript format is not documented, so this reads only
-  `origin.kind` and `toolUseResult.answers`. Claude Code only for now: Codex's
+  Claude Code's transcript format is undocumented. The hook uses the prompt
+  origin and matches each answer to its question and options. Claude Code only for now: Codex's
   hooks and session logs work differently.
   (https://code.claude.com/docs/en/hooks)
 - **Core cap.** Claude Code drops hook context longer than 10,000 characters

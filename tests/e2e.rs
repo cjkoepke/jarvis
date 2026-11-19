@@ -211,11 +211,12 @@ fn typed_prompt(text: &str) -> Value {
     json!({ "type": "user", "origin": { "kind": "human" }, "message": { "role": "user", "content": text } })
 }
 
-fn answered_question(answer: &str) -> Value {
+fn answered_question(question: &str, labels: &[&str], answer: &str) -> Value {
+    let options: Vec<Value> = labels.iter().map(|label| json!({ "label": label })).collect();
     json!({
         "type": "user",
         "message": { "role": "user", "content": [{ "type": "tool_result", "tool_use_id": "t1", "content": "answered" }] },
-        "toolUseResult": { "questions": [{ "question": "Which tier?" }], "answers": { "Which tier?": answer } }
+        "toolUseResult": { "questions": [{ "question": question, "options": options }], "answers": { (question): answer } }
     })
 }
 
@@ -273,14 +274,17 @@ fn starting_agents_waits_until_the_owner_picks_a_tier_the_standards_offer() {
         });
         let reply = sandbox.run_hook(gate["hooks"][0]["command"].as_str().unwrap(), &input);
         assert!(reply.status.success());
-        let reply: Option<Value> = serde_json::from_slice(&reply.stdout).ok();
-        reply.map(|reply| {
-            assert_eq!(reply["hookSpecificOutput"]["permissionDecision"], "deny");
+        if reply.stdout.is_empty() {
+            return None;
+        }
+        let reply: Value = serde_json::from_slice(&reply.stdout).unwrap();
+        assert_eq!(reply["hookSpecificOutput"]["permissionDecision"], "deny");
+        Some(
             reply["hookSpecificOutput"]["permissionDecisionReason"]
                 .as_str()
                 .unwrap()
-                .to_string()
-        })
+                .to_string(),
+        )
     };
 
     append_line(&transcript, typed_prompt("research this with a few agents"));
@@ -288,7 +292,20 @@ fn starting_agents_waits_until_the_owner_picks_a_tier_the_standards_offer() {
     assert!(reason.contains("Thrifty: one agent.") && reason.contains("Lavish: ten agents."));
     assert_eq!(launch(Some("subagent")), None);
 
-    append_line(&transcript, answered_question("Thrifty (Recommended)"));
+    append_line(&transcript, answered_question("Which hotel?", &["Thrifty", "Downtown"], "Thrifty"));
+    assert!(launch(None).is_some());
+    let tiers = ["Thrifty (Recommended)", "Lavish"];
+    append_line(&transcript, answered_question("Which tier?", &tiers, "Please skip Lavish"));
+    assert!(launch(None).is_some());
+    append_line(&transcript, answered_question("Which tier?", &tiers, tiers[0]));
+    assert_eq!(launch(None), None);
+    append_line(
+        &transcript,
+        json!({
+            "type": "user", "origin": { "kind": "task-notification" }, "turnOrigin": "human",
+            "message": { "role": "user", "content": "done" }
+        }),
+    );
     assert_eq!(launch(None), None);
 
     append_line(&transcript, typed_prompt("now something else"));

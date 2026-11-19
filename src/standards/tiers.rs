@@ -12,17 +12,17 @@ pub struct Tier {
 }
 
 impl Tier {
-    /// An answer to a question picks the tier when it names it as a word, in any case.
-    pub fn is_named_in_answer(&self, answer: &str) -> bool {
-        contains_word(&answer.to_lowercase(), &self.name.to_lowercase())
+    pub fn starts_label(&self, label: &str) -> bool {
+        let label = label.trim().to_lowercase();
+        let name = self.name.to_lowercase();
+        label.strip_prefix(&name).is_some_and(|rest| is_word_edge(rest.chars().next()))
     }
 
     /// A prompt picks the tier when it opens with the tier's name or calls it a tier, in any case.
     pub fn is_named_in_prompt(&self, prompt: &str) -> bool {
         let prompt = prompt.trim().to_lowercase();
         let name = self.name.to_lowercase();
-        let opens_with_it = prompt.starts_with(&name) && is_word_edge(prompt[name.len()..].chars().next());
-        opens_with_it || contains_word(&prompt, &format!("{name} tier"))
+        self.starts_label(&prompt) || contains_word(&prompt, &format!("{name} tier"))
     }
 }
 
@@ -83,10 +83,10 @@ mod tests {
     }
 
     #[test]
-    fn an_answer_names_a_tier_anywhere_and_a_prompt_only_up_front_or_as_a_tier() {
+    fn labels_start_with_a_tier_and_prompts_can_also_name_it_as_a_tier() {
         let balanced = tier("Balanced");
-        assert!(balanced.is_named_in_answer("Balanced (Recommended)"));
-        assert!(!balanced.is_named_in_answer("Unbalanced"));
+        assert!(balanced.starts_label("Balanced (Recommended)"));
+        assert!(!balanced.starts_label("Unbalanced"));
 
         assert!(balanced.is_named_in_prompt("balanced, and keep it short"));
         assert!(balanced.is_named_in_prompt("Do it on the Balanced tier."));
