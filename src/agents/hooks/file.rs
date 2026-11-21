@@ -1,5 +1,6 @@
-use super::json_config::{self, Config};
-use super::{hook_command, hook_subcommand, Agent};
+use super::placements;
+use crate::agents::json_config::{self, Config};
+use crate::agents::Agent;
 use crate::paths::Env;
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
@@ -17,13 +18,17 @@ pub fn register(agent: &dyn Agent, env: &Env) -> Result<()> {
     let hooks = hooks
         .as_object_mut()
         .with_context(|| format!("`hooks` in {} is not an object", path.display()))?;
-    for event in agent.context_events() {
-        let groups = hooks.entry(*event).or_insert_with(|| json!([]));
+    for placement in placements(agent) {
+        let event = placement.trigger.event;
+        let groups = hooks.entry(event).or_insert_with(|| json!([]));
         let groups = groups
             .as_array_mut()
             .with_context(|| format!("`hooks.{event}` in {} is not a list", path.display()))?;
-        let handler = json!({ "type": "command", "command": hook_command(agent, env, event), "statusMessage": TITLE });
-        groups.push(json!({ "hooks": [handler] }));
+        let handler = json!({ "type": "command", "command": env.shell_command(&subcommand(agent, event)), "statusMessage": TITLE });
+        groups.push(match placement.trigger.matcher {
+            Some(matcher) => json!({ "matcher": matcher, "hooks": [handler] }),
+            None => json!({ "hooks": [handler] }),
+        });
     }
     json_config::write(&path, &config)
 }
@@ -54,10 +59,14 @@ pub struct RegisteredHook {
 pub fn registered(agent: &dyn Agent, env: &Env) -> Vec<RegisteredHook> {
     let config = json_config::read(&agent.hooks_file(env)).unwrap_or_default();
     let mut registered = Vec::new();
-    for event in agent.context_events().iter().copied() {
-        let subcommand = hook_subcommand(agent, event);
+    for placement in placements(agent) {
+        let event = placement.trigger.event;
+        let subcommand = subcommand(agent, event);
         let groups = config.get("hooks").and_then(|hooks| hooks.get(event)).and_then(Value::as_array);
         for (group_index, group) in groups.into_iter().flatten().enumerate() {
+            if placement.trigger.matcher.is_some_and(|matcher| group["matcher"] != matcher) {
+                continue;
+            }
             let handlers = group.get("hooks").and_then(Value::as_array);
             for (handler_index, handler) in handlers.into_iter().flatten().enumerate() {
                 let executable = command_of(handler).and_then(|command| env.executable_in(command, &subcommand));
@@ -73,6 +82,11 @@ pub fn registered(agent: &dyn Agent, env: &Env) -> Vec<RegisteredHook> {
         }
     }
     registered
+}
+
+/// What follows `jarvis --home <home>` on the line an agent runs: `Cmd::Hook` spelled out.
+fn subcommand(agent: &dyn Agent, event: &str) -> String {
+    format!("hook {} {event}", agent.id())
 }
 
 fn command_of(handler: &Value) -> Option<&str> {

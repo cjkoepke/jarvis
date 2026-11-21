@@ -1,4 +1,4 @@
-use crate::agents::{self, hooks_file, skills};
+use crate::agents::{self, hooks, skills};
 use crate::ast_grep::{self, Action, PackageManager};
 use crate::git::hook_config;
 use crate::paths::Env;
@@ -13,7 +13,7 @@ pub fn run(env: &Env) -> Result<ExitCode> {
         .map(|record| record.ast_grep_installed_by)
         .unwrap_or_default();
     for agent in agents::all() {
-        hooks_file::unregister(agent, env)?;
+        hooks::file::unregister(agent, env)?;
         skills::remove(agent, env)?;
     }
     hook_config::unregister(env)?;

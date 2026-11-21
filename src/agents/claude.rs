@@ -50,10 +50,6 @@ impl Agent for Claude {
         env.home.join(".claude/skills")
     }
 
-    fn context_events(&self) -> &'static [&'static str] {
-        &["SessionStart", "SubagentStart"]
-    }
-
     fn review_models(&self, env: &Env) -> Vec<ReviewModel> {
         claude_models::offered(env)
     }

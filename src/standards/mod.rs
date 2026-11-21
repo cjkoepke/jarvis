@@ -1,5 +1,6 @@
 pub mod custom;
 pub mod source;
+pub mod tiers;
 
 use crate::files::{has_extension, sorted_entries};
 use anyhow::{bail, Context, Result};

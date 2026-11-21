@@ -1,4 +1,4 @@
-use super::{hooks_file, skills, Agent, Approval};
+use super::{hooks, skills, Agent, Approval};
 use crate::check::{Check, CheckSubject};
 use crate::files::find_on_path;
 use crate::paths::Env;
@@ -31,15 +31,11 @@ fn executable_check(agent: &dyn Agent) -> Check {
 
 fn hooks_check(agent: &dyn Agent, env: &Env) -> Check {
     let hooks = subject(agent, "hooks");
-    let registered = hooks_file::registered(agent, env);
+    let registered = hooks::file::registered(agent, env);
 
+    let events: Vec<&str> = hooks::placements(agent).iter().map(|placement| placement.trigger.event).collect();
     let is_registered = |event: &str| registered.iter().any(|hook| hook.event == event);
-    let unregistered: Vec<&str> = agent
-        .context_events()
-        .iter()
-        .copied()
-        .filter(|event| !is_registered(event))
-        .collect();
+    let unregistered: Vec<&str> = events.iter().copied().filter(|event| !is_registered(event)).collect();
     if !unregistered.is_empty() {
         return hooks.fail(format!(
             "{} not registered in {}; run `jarvis install`",
@@ -58,7 +54,7 @@ fn hooks_check(agent: &dyn Agent, env: &Env) -> Check {
             executable.display()
         ));
     }
-    hooks.ok(agent.context_events().join(", "))
+    hooks.ok(events.join(", "))
 }
 
 fn skills_check(agent: &dyn Agent, env: &Env, standards: &Standards) -> Check {

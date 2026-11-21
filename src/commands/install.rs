@@ -1,4 +1,4 @@
-use crate::agents::{self, hooks_file, skills, Agent, Approval};
+use crate::agents::{self, hooks, skills, Agent, Approval};
 use crate::ast_grep::{self, Action, PackageManager};
 use crate::cli::InstallArgs;
 use crate::git::hook_config;
@@ -126,7 +126,7 @@ fn replace_installed_standards(env: &Env, source: &Source) -> Result<Standards> 
 }
 
 fn install_for_agent(agent: &dyn Agent, env: &Env, standards: &Standards) -> Result<()> {
-    hooks_file::register(agent, env)?;
+    hooks::file::register(agent, env)?;
     message::done(agent.id(), &format!("hooks in {}", agent.hooks_file(env).display()));
 
     let skipped_skills = skills::install(agent, env, standards)?;
@@ -186,7 +186,7 @@ fn provide_ast_grep(env: &Env) -> Option<PackageManager> {
 fn remove_unselected_agents(env: &Env, selected: &[&dyn Agent], previous: Option<&InstallRecord>) -> Result<()> {
     let is_selected = |agent: &dyn Agent| selected.iter().any(|kept| kept.id() == agent.id());
     for agent in agents::all().into_iter().filter(|agent| !is_selected(*agent)) {
-        hooks_file::unregister(agent, env)?;
+        hooks::file::unregister(agent, env)?;
         skills::remove(agent, env)?;
         let was_installed = previous.is_some_and(|record| record.agent_ids.iter().any(|id| id == agent.id()));
         if was_installed {

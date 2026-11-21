@@ -7,7 +7,7 @@ mod codex;
 mod codex_models;
 mod codex_repo;
 mod codex_trust;
-pub mod hooks_file;
+pub mod hooks;
 mod json_config;
 pub mod skills;
 
@@ -15,7 +15,6 @@ use crate::check::requirement::Requirement;
 use crate::git::repo::Repo;
 use crate::paths::Env;
 use anyhow::{Context, Result};
-use serde_json::json;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -43,7 +42,6 @@ pub trait Agent: Sync {
     fn executable_name(&self) -> &'static str;
     fn hooks_file(&self, env: &Env) -> PathBuf;
     fn skills_dir(&self, env: &Env) -> PathBuf;
-    fn context_events(&self) -> &'static [&'static str];
 
     /// A headless run that cannot change files, reads the prompt on stdin and prints
     /// only its reply. It must be able to read `standards_dir`.
@@ -69,10 +67,6 @@ pub trait Agent: Sync {
     fn approval(&self, _env: &Env) -> Approval {
         Approval::NotRequired
     }
-
-    fn hook_reply(&self, event: &str, context: &str) -> String {
-        json!({ "hookSpecificOutput": { "hookEventName": event, "additionalContext": context } }).to_string()
-    }
 }
 
 pub fn all() -> Vec<&'static dyn Agent> {
@@ -91,12 +85,4 @@ pub fn chosen(ids: &[String]) -> Result<Vec<&'static dyn Agent>> {
     ids.iter()
         .map(|id| by_id(id).with_context(|| format!("unknown agent `{id}`; known agents: {}", known_ids.join(", "))))
         .collect()
-}
-
-pub fn hook_subcommand(agent: &dyn Agent, event: &str) -> String {
-    format!("hook {} {event}", agent.id())
-}
-
-pub fn hook_command(agent: &dyn Agent, env: &Env, event: &str) -> String {
-    env.shell_command(&hook_subcommand(agent, event))
 }

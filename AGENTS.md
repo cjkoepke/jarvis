@@ -47,7 +47,8 @@ agent session.
 ## What each command does
 
 - **`install`** writes the standards to `~/.jarvis/standards`, registers
-  `SessionStart` and `SubagentStart` hooks for Claude Code and Codex, copies
+  `SessionStart` and `SubagentStart` hooks for Claude Code and Codex and a
+  `PreToolUse` hook for Claude Code's `Agent` and `Workflow` tools, copies
   the skills to where each agent looks for them, and adds a `pre-push` hook to
   the global git config (Git 2.54 or newer). The standards are the ones
   packaged in the binary, or those of a folder named with `--standards`, with
@@ -68,7 +69,12 @@ agent session.
   install the newest one, then runs that binary's `install`. A binary cargo
   built from a checkout is rebuilt from that checkout as it is; pulling newer
   commits there stays with the person.
-- **`hook`** is what the agent hooks run. It replies with the core.
+- **`hook`** is what the agent hooks run. It runs the hook placed on that
+  event for that agent. At `SessionStart` and `SubagentStart` that replies
+  with the core. At Claude Code's `PreToolUse` it refuses to start agents from
+  the main conversation until the owner has picked one of the `orchestration`
+  skill's tiers since their last prompt, and lists the tiers in the refusal.
+  An event with no hook gets no reply.
 - **`pre-push`** is what the git hook runs. It starts the headless agent the
   settings name with the `review` skill. Claude Code may only read files and
   run `git log`, `git show`, `git diff` and `printenv`; Codex runs in its
@@ -126,6 +132,24 @@ agent session.
 
 ## Why it is built this way
 
+- **Orchestration tier.** A skill only loads when the model chooses to, so a
+  hook makes the tier question one the model cannot skip. The pick is read from
+  the session transcript Claude Code keeps, so the model cannot approve itself
+  as it could with a file of its own. The owner picks either by choosing a
+  tier in an `AskUserQuestion` that offers every tier, or by typing a prompt
+  that opens with a tier's name or calls it a tier. Where the tiers do not
+  fit the tool's two to four options, the refusal asks for a typed pick.
+  Only a typed prompt starts a new turn: background notifications and
+  messages from other agents keep the pick. A call carrying `agent_id` comes
+  from a subagent or teammate, which has no owner to ask and needed a pick to
+  start, so it goes through. The tiers are the indented `Name: description`
+  items of the `orchestration` skill, and without any there is no gate.
+  Claude Code's transcript format is undocumented, so the hook reads only a
+  prompt's `origin` and an answer's question, options and choice.
+  (https://code.claude.com/docs/en/hooks) Claude Code only for now: Codex runs
+  the same hook before its `spawn_agent` tool
+  (https://learn.chatgpt.com/docs/hooks), but nothing reads an owner's pick
+  from its session log yet.
 - **Core cap.** Claude Code drops hook context longer than 10,000 characters
   (https://code.claude.com/docs/en/hooks). The cap is 6,000 because a core
   that long stops being followed.
@@ -254,6 +278,30 @@ agent session.
   (https://docs.brew.sh/Formula-Cookbook). A person's own `brew upgrade` then
   leaves the hooks working. `update` starts the new binary through the same
   path.
+- **Hook layout.** Each hook has a folder in `src/agents/hooks/`. Its `mod.rs`
+  says what the hook does and lists the agents that run it, and one file per
+  agent says on which of that agent's events and with what of its own. An
+  agent without a file in a hook's folder does not have that hook, so the
+  folder is where a gap in parity shows. Every hook reads the same
+  `HookInput` and answers with the same `Reply`, and only those two files
+  know the JSON an agent hands a hook and reads back from it. It is written
+  once because Codex names the fields jarvis reads and writes as Claude Code
+  does
+  (https://code.claude.com/docs/en/hooks, https://learn.chatgpt.com/docs/hooks).
+  A hook asks for its input, because reading it waits until the agent closes
+  the pipe, and delivering the core must not wait on anything.
+  Registration, `status`, the Codex approval and the `hook` command all work
+  from `hooks::placements`, so a hook in `hooks::all()` needs no other wiring.
+- **One hook per event.** The registered command is
+  `jarvis hook <agent> <event>`, so one event of an agent runs one hook, which
+  a test holds. Naming the hook in the command would change every registered
+  line, and Codex ignores a changed hook until the person approves it again:
+  its approval is a hash over the event, the matcher and the whole handler,
+  which is its type, command, status message, timeout and `async` (`hook_hash`
+  in
+  https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/discovery.rs).
+  This is a choice for now. A second hook on an event already taken needs its
+  own name on its own line, which leaves the approved lines as they are.
 - **Hook files.** jarvis hooks are matched loosely, not on the exact command,
   so hooks written by a binary at an older path are still replaced. A hook file
   that is not a JSON object is an error: jarvis never overwrites configuration
@@ -382,10 +430,12 @@ out of date until the next `jarvis install`.
 
 ## Prompts
 
-jarvis writes no prompt text of its own. Every agent gets the standards as they
-are written:
+jarvis writes no prompt text of its own beyond the two lines that frame the
+tiers when it holds back an agent launch. Every agent gets the standards as
+they are written:
 
 - Session and sub-agent hooks send the core, with nothing around it.
+- A held-back agent launch gets the tier items of the `orchestration` skill.
 - The pre-push reviewer gets the core followed by the `review` skill, as a
   session would after loading that skill. It gathers the commits, the diff and
   the other skills itself, with the commands the skill shows.
@@ -410,7 +460,8 @@ or `VERDICT: FAIL`. jarvis reads only that line.
 | --- | --- |
 | `src/cli.rs` | Command-line definition. |
 | `src/commands/` | One file per command: `install`, `uninstall`, `update`, `clone`, `status`, `settings`, `hook`, `pre_push`. `repo/` holds `init` and `audit`. |
-| `src/agents/` | One file per agent, one per agent's model catalog and one per agent's settings for a repository, plus hook-file editing, skill copying and status checks. |
+| `src/agents/` | One file per agent, one per agent's model catalog and one per agent's settings for a repository, plus skill copying and status checks. |
+| `src/agents/hooks/` | What a hook is, the input and reply every hook shares, and editing an agent's hooks file. One folder per hook: `core_delivery/` and `launch_gate/`, each with a file per agent that runs it. |
 | `src/check/` | The check type, its table and JSON output, the report `status` and `repo audit` print, and a check paired with its remedy. |
 | `src/ui/` | The colour palette and styled messages every command prints through. `prompt/` holds the keyboard-driven picker, checklist and text input. |
 | `src/review/` | Running the reviewer, keeping its transcript, reading its verdict, deciding whether it may fix, counting its fix commits and remembering refused pushes. |
@@ -423,8 +474,15 @@ or `VERDICT: FAIL`. jarvis reads only that line.
 | `tests/e2e.rs` | Whole-command tests in a throwaway home with a fake reviewer. |
 
 To support another agent, add a file in `src/agents/` that implements `Agent`
-and list it in `all()`. Hook registration, skills, status checks, the review
+and list it in `all()`. Then give it a file in the folder of each hook it
+runs and list that in the hook's `mod.rs`. Skills, status checks, the review
 and the `repo` commands need no changes.
+
+To add a hook, add a folder in `src/agents/hooks/` with a `mod.rs` holding its
+`Hook` and one file per agent holding that agent's `Provider`, and list the
+hook in `hooks::all()`. It needs an event no other hook of that agent is on.
+A fact about the moment that a hook needs and `HookInput` lacks is added
+there, for every agent.
 
 To add a setting, add its field in `src/settings.rs` and a `Setting` variant in
 `src/commands/settings.rs`.
@@ -451,6 +509,9 @@ To add a setting, add its field in `src/settings.rs` and a `Setting` variant in
   one.
 - A packaged skill is written without its files' permissions, so a script it
   ships is not executable. A skill from a folder keeps them.
+- Codex has no launch gate. It needs a `codex.rs` in
+  `src/agents/hooks/launch_gate/` that reads the owner's pick from Codex's
+  session log.
 - Codex delivery only works once the hooks are approved with `/hooks`. Until
   then Codex skips them and sessions start without the standards.
 - `status` cannot tell when Codex wants a changed hook approved again; it still
