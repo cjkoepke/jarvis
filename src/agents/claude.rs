@@ -1,9 +1,7 @@
-use super::{claude_launch_gate, claude_models, claude_repo, Agent, HookEvent, ReviewModel, ReviewRun};
+use super::{claude_models, claude_repo, Agent, ReviewModel, ReviewRun};
 use crate::check::requirement::Requirement;
 use crate::git::repo::Repo;
 use crate::paths::Env;
-use crate::standards::tiers::Tier;
-use anyhow::Result;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -50,18 +48,6 @@ impl Agent for Claude {
 
     fn skills_dir(&self, env: &Env) -> PathBuf {
         env.home.join(".claude/skills")
-    }
-
-    fn context_events(&self) -> &'static [&'static str] {
-        &["SessionStart", "SubagentStart"]
-    }
-
-    fn launch_gate(&self) -> Option<HookEvent> {
-        Some(claude_launch_gate::HOOK)
-    }
-
-    fn hold_launch(&self, hook_input: &str, tiers: &[Tier]) -> Result<Option<String>> {
-        claude_launch_gate::hold(hook_input, tiers)
     }
 
     fn review_models(&self, env: &Env) -> Vec<ReviewModel> {

@@ -1,4 +1,4 @@
-use super::hooks_file::{self, RegisteredHook};
+use super::hooks::file::{self, RegisteredHook};
 use super::{codex, Agent, Approval};
 use crate::paths::Env;
 use std::fs;
@@ -9,7 +9,7 @@ const HOW_TO_APPROVE: &str = "open Codex, run /hooks and approve the jarvis hook
 const HOW_TO_ENABLE: &str = "open Codex, run /hooks and switch the jarvis hooks back on";
 
 pub fn approval(agent: &dyn Agent, env: &Env) -> Approval {
-    let hooks = hooks_file::registered(agent, env);
+    let hooks = file::registered(agent, env);
     let states = hook_states(env).unwrap_or_default();
     let hooks_file = agent.hooks_file(env);
     let state_of = |hook: &RegisteredHook| states.get(&state_key(&hooks_file, hook));

@@ -47,10 +47,6 @@ impl Agent for Codex {
         env.home.join(".agents/skills")
     }
 
-    fn context_events(&self) -> &'static [&'static str] {
-        &["SessionStart", "SubagentStart"]
-    }
-
     fn review_models(&self, env: &Env) -> Vec<ReviewModel> {
         codex_models::offered(env)
     }

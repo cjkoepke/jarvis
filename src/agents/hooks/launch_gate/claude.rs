@@ -1,15 +1,19 @@
-use super::claude_transcript;
-use super::HookEvent;
-use crate::standards::tiers::Tier;
-use anyhow::Result;
-use serde::Deserialize;
-use serde_json::json;
-use std::path::PathBuf;
+mod transcript;
+
+use crate::agents::claude::Claude;
+use crate::agents::hooks::{HookInput, Provider, Reply, Trigger};
+use crate::standards::tiers::{self, Tier};
+use crate::standards::Standards;
+use anyhow::{Context, Result};
 
 /// `Task` is the name older Claude Code versions gave the `Agent` tool.
-pub const HOOK: HookEvent = HookEvent {
-    name: "PreToolUse",
-    matcher: Some("Agent|Task|Workflow"),
+pub const PROVIDER: Provider = Provider {
+    agent: &Claude,
+    triggers: &[Trigger {
+        event: "PreToolUse",
+        matcher: Some("Agent|Task|Workflow"),
+    }],
+    reply: hold,
 };
 
 const ASK_FOR_A_TIER: &str = "No tier is picked for starting agents. Load the `orchestration` skill, then ask the owner with \
@@ -20,41 +24,31 @@ const ASK_FOR_A_TYPED_TIER: &str =
 const QUESTION_OPTIONS: std::ops::RangeInclusive<usize> = 2..=4;
 const HOW_LONG_IT_HOLDS: &str = "Their pick lets agents start until their next message.";
 
-#[derive(Deserialize)]
-struct HookInput {
-    transcript_path: PathBuf,
-    /// Set when the call comes from a subagent or a teammate, never from the main conversation.
-    agent_id: Option<String>,
-}
-
 /// Holds back a call from the main conversation until the owner has picked a tier since their
 /// last prompt. A subagent's call goes through: starting that subagent already took a pick, and
 /// it has no owner to ask.
-pub fn hold(hook_input: &str, tiers: &[Tier]) -> Result<Option<String>> {
-    let input: HookInput = serde_json::from_str(hook_input)?;
-    if tiers.is_empty() || input.agent_id.is_some() {
-        return Ok(None);
+fn hold(standards: &Standards) -> Result<Reply> {
+    let tiers = tiers::offered(standards);
+    if tiers.is_empty() {
+        return Ok(Reply::Nothing);
     }
-    if claude_transcript::has_tier_pick(&input.transcript_path, tiers)? {
-        return Ok(None);
+    let input = HookInput::from_stdin()?;
+    if input.from_subagent {
+        return Ok(Reply::Nothing);
     }
-    Ok(Some(denial(tiers)))
+    let transcript = input.transcript.context("Claude Code named no transcript")?;
+    if transcript::has_tier_pick(&transcript, &tiers)? {
+        return Ok(Reply::Nothing);
+    }
+    Ok(Reply::Deny { reason: refusal(&tiers) })
 }
 
-fn denial(tiers: &[Tier]) -> String {
+fn refusal(tiers: &[Tier]) -> String {
     let options: Vec<String> = tiers.iter().map(|tier| format!("- {}", tier.line)).collect();
     let instruction = if QUESTION_OPTIONS.contains(&tiers.len()) {
         ASK_FOR_A_TIER
     } else {
         ASK_FOR_A_TYPED_TIER
     };
-    let reason = format!("{instruction}\n{}\n{HOW_LONG_IT_HOLDS}", options.join("\n"));
-    json!({
-        "hookSpecificOutput": {
-            "hookEventName": HOOK.name,
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        }
-    })
-    .to_string()
+    format!("{instruction}\n{}\n{HOW_LONG_IT_HOLDS}", options.join("\n"))
 }
